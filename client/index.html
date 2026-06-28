@@ -1,0 +1,227 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>Артилерія</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    background: #0a0e1a;
+    font-family: 'Courier New', monospace;
+    color: #c8d8e8;
+    overflow: hidden;
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+  }
+
+  #ui-top {
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    z-index: 10;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 10px 16px;
+    background: linear-gradient(to bottom, rgba(10,14,26,0.95), transparent);
+  }
+
+  #status {
+    font-size: 13px;
+    letter-spacing: 0.08em;
+    color: #7ab3d4;
+    text-transform: uppercase;
+  }
+
+  #timer-bar {
+    width: 120px;
+    height: 6px;
+    background: #1a2535;
+    border-radius: 3px;
+    overflow: hidden;
+  }
+  #timer-fill {
+    height: 100%;
+    width: 100%;
+    background: #4daaff;
+    border-radius: 3px;
+    transition: width 0.1s linear, background 0.3s;
+  }
+
+  #canvas-container { flex: 1; position: relative; }
+  #three-canvas { display: block; width: 100% !important; height: 100% !important; }
+
+  #ui-bottom {
+    position: absolute;
+    bottom: 0; left: 0; right: 0;
+    z-index: 10;
+    padding: 12px 16px 20px;
+    background: linear-gradient(to top, rgba(10,14,26,0.95), transparent);
+    display: flex;
+    gap: 10px;
+    align-items: center;
+  }
+
+  .btn {
+    flex: 1;
+    padding: 12px 8px;
+    border: 1px solid;
+    border-radius: 6px;
+    font-family: 'Courier New', monospace;
+    font-size: 12px;
+    font-weight: bold;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    cursor: pointer;
+    transition: all 0.15s;
+    background: transparent;
+  }
+
+  #btn-fire {
+    border-color: #e05050;
+    color: #e05050;
+  }
+  #btn-fire:hover:not(:disabled), #btn-fire.active {
+    background: #e05050;
+    color: #fff;
+    box-shadow: 0 0 16px rgba(224,80,80,0.5);
+  }
+
+  #btn-move {
+    border-color: #4daaff;
+    color: #4daaff;
+  }
+  #btn-move:hover:not(:disabled), #btn-move.active {
+    background: #4daaff;
+    color: #0a0e1a;
+    box-shadow: 0 0 16px rgba(77,170,255,0.4);
+  }
+
+  .btn:disabled { opacity: 0.3; cursor: default; }
+
+  #hint {
+    text-align: center;
+    font-size: 11px;
+    color: #4a6a8a;
+    padding: 4px 0;
+    letter-spacing: 0.04em;
+  }
+
+  /* Overlay screens */
+  .overlay {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    background: rgba(10,14,26,0.92);
+    z-index: 100;
+    gap: 20px;
+    text-align: center;
+    padding: 24px;
+  }
+  .overlay h1 {
+    font-size: 28px;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+  }
+  .overlay p { font-size: 14px; color: #7ab3d4; line-height: 1.6; }
+  .overlay .big { font-size: 48px; }
+  .overlay-btn {
+    padding: 14px 36px;
+    border: 2px solid #4daaff;
+    border-radius: 8px;
+    background: transparent;
+    color: #4daaff;
+    font-family: 'Courier New', monospace;
+    font-size: 14px;
+    font-weight: bold;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+  .overlay-btn:hover { background: #4daaff; color: #0a0e1a; }
+
+  .label-my { color: #4daaff; }
+  .label-enemy { color: #e05050; }
+
+  #field-labels {
+    position: absolute;
+    top: 56px;
+    left: 0; right: 0;
+    display: flex;
+    justify-content: space-around;
+    pointer-events: none;
+    z-index: 5;
+  }
+  .field-label {
+    font-size: 11px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    padding: 3px 10px;
+    border-radius: 3px;
+  }
+  .field-label.my { color: #4daaff; border: 1px solid rgba(77,170,255,0.3); }
+  .field-label.enemy { color: #e05050; border: 1px solid rgba(224,80,80,0.3); }
+</style>
+</head>
+<body>
+
+<!-- Overlay: Menu -->
+<div class="overlay" id="screen-menu">
+  <div class="big">🎯</div>
+  <h1>Артилерія</h1>
+  <p>Знищ гармати противника.<br>5 секунд на хід — стріляй або переміщайся.</p>
+  <button class="overlay-btn" onclick="findGame()">Знайти суперника</button>
+</div>
+
+<!-- Overlay: Waiting -->
+<div class="overlay" id="screen-waiting" style="display:none">
+  <div class="big">⏳</div>
+  <h1>Пошук...</h1>
+  <p>Чекаємо на суперника</p>
+</div>
+
+<!-- Overlay: Game Over -->
+<div class="overlay" id="screen-gameover" style="display:none">
+  <div class="big" id="gameover-icon">🏆</div>
+  <h1 id="gameover-title">Перемога!</h1>
+  <p id="gameover-sub"></p>
+  <button class="overlay-btn" onclick="resetGame()">Зіграти ще раз</button>
+</div>
+
+<!-- Overlay: Opponent Left -->
+<div class="overlay" id="screen-left" style="display:none">
+  <div class="big">🚪</div>
+  <h1>Суперник вийшов</h1>
+  <button class="overlay-btn" onclick="resetGame()">Повернутись</button>
+</div>
+
+<!-- Game UI -->
+<div id="ui-top">
+  <div id="status">Очікування...</div>
+  <div id="timer-bar"><div id="timer-fill"></div></div>
+</div>
+
+<div id="field-labels" style="display:none">
+  <div class="field-label my">Моя сторона</div>
+  <div class="field-label enemy">Сторона ворога</div>
+</div>
+
+<div id="canvas-container">
+  <canvas id="three-canvas"></canvas>
+</div>
+
+<div id="ui-bottom">
+  <button class="btn" id="btn-fire" disabled onclick="selectMode('fire')">🔥 Вогонь</button>
+  <button class="btn" id="btn-move" disabled onclick="selectMode('move')">↔ Рухатись</button>
+</div>
+<div id="hint"></div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script src="game.js"></script>
+</body>
+</html>
