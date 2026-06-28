@@ -1,0 +1,13 @@
+services:
+  - type: web
+    name: artillery-game
+    runtime: node
+    rootDir: server
+    buildCommand: npm install
+    startCommand: npm start
+    envVars:
+      - key: PORT
+        value: 3000
+    staticFiles:
+      - path: /
+        dir: ../client
