@@ -40,7 +40,7 @@ body {
 .field-label.enemy { color:#e05050; border:1px solid rgba(224,80,80,0.3); }
 .field-label.my { color:#4daaff; border:1px solid rgba(77,170,255,0.3); }
 
-#canvas-wrap { flex:1; display:flex; align-items:center; justify-content:center; overflow:hidden; min-height:0; max-height:calc(100vh - 120px); }
+#canvas-wrap { flex:1; display:flex; align-items:center; justify-content:center; overflow:hidden; min-height:0; max-height:55vh; }
 canvas { display:block; }
 
 #hint { text-align:center; font-size:10px; color:#4a6a8a; padding:2px 0; letter-spacing:0.03em; flex-shrink:0; background:rgba(10,14,26,0.95); min-height:18px; }
@@ -159,7 +159,7 @@ function layout(){
   const W=wrap.clientWidth;
   // Reserve space for: ui-top~36px, field-labels~26px, hint~18px, ui-bottom~56px + gaps ~10px = ~146px
   const reserved=150;
-  const H=Math.max(100, window.innerHeight - reserved);
+  const H = Math.floor(window.innerHeight * 0.55);
   const totalRows=GRID*2+GAP;
   CELL=Math.min(Math.floor(W/GRID), Math.floor(H/totalRows));
   CELL=Math.max(CELL, 20); // minimum cell size
