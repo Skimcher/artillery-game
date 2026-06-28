@@ -8,7 +8,7 @@ const server = http.createServer(app);
 const wss = new WebSocketServer({ server });
 
 // Serve client files
-app.use(express.static(path.join(__dirname, '..', '..', 'client')));
+app.use(express.static(path.join(__dirname, 'public')));
 
 // Game state
 const waitingPlayers = [];
