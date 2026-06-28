@@ -5,172 +5,91 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
 <title>Артилерія</title>
 <style>
-  * { margin: 0; padding: 0; box-sizing: border-box; }
-  body {
-    background: #0a0e1a;
-    font-family: 'Courier New', monospace;
-    color: #c8d8e8;
-    overflow: hidden;
-    height: 100vh;
-    display: flex;
-    flex-direction: column;
-  }
+* { margin:0; padding:0; box-sizing:border-box; }
+body {
+  background:#0a0e1a;
+  font-family:'Courier New',monospace;
+  color:#c8d8e8;
+  height:100vh;
+  display:flex;
+  flex-direction:column;
+  overflow:hidden;
+  user-select:none;
+}
 
-  #ui-top {
-    position: absolute;
-    top: 0; left: 0; right: 0;
-    z-index: 10;
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding: 10px 16px;
-    background: linear-gradient(to bottom, rgba(10,14,26,0.95), transparent);
-  }
+#ui-top {
+  display:flex;
+  justify-content:space-between;
+  align-items:center;
+  padding:10px 14px;
+  background:rgba(10,14,26,0.95);
+  border-bottom:1px solid #1a2535;
+  flex-shrink:0;
+}
+#status { font-size:13px; letter-spacing:0.08em; color:#7ab3d4; text-transform:uppercase; }
+#timer-bar { width:110px; height:6px; background:#1a2535; border-radius:3px; overflow:hidden; }
+#timer-fill { height:100%; width:100%; background:#4daaff; border-radius:3px; transition:background 0.3s; }
 
-  #status {
-    font-size: 13px;
-    letter-spacing: 0.08em;
-    color: #7ab3d4;
-    text-transform: uppercase;
-  }
+#field-labels {
+  display:none;
+  justify-content:space-around;
+  padding:5px 0;
+  background:rgba(10,14,26,0.8);
+  flex-shrink:0;
+}
+.field-label { font-size:10px; letter-spacing:0.1em; text-transform:uppercase; padding:2px 10px; border-radius:3px; }
+.field-label.enemy { color:#e05050; border:1px solid rgba(224,80,80,0.3); }
+.field-label.my { color:#4daaff; border:1px solid rgba(77,170,255,0.3); }
 
-  #timer-bar {
-    width: 120px;
-    height: 6px;
-    background: #1a2535;
-    border-radius: 3px;
-    overflow: hidden;
-  }
-  #timer-fill {
-    height: 100%;
-    width: 100%;
-    background: #4daaff;
-    border-radius: 3px;
-    transition: width 0.1s linear, background 0.3s;
-  }
+#canvas-wrap { flex:1; display:flex; align-items:center; justify-content:center; overflow:hidden; }
+canvas { display:block; }
 
-  #canvas-container { flex: 1; position: relative; }
-  #three-canvas { display: block; width: 100% !important; height: 100% !important; }
+#ui-bottom {
+  display:flex;
+  gap:10px;
+  padding:10px 14px 16px;
+  background:rgba(10,14,26,0.95);
+  border-top:1px solid #1a2535;
+  flex-shrink:0;
+}
+.btn {
+  flex:1; padding:13px 8px;
+  border:1px solid; border-radius:6px;
+  font-family:'Courier New',monospace; font-size:12px;
+  font-weight:bold; letter-spacing:0.06em; text-transform:uppercase;
+  cursor:pointer; background:transparent; transition:all 0.15s;
+}
+#btn-fire { border-color:#e05050; color:#e05050; }
+#btn-fire.active, #btn-fire:active { background:#e05050; color:#fff; }
+#btn-move { border-color:#4daaff; color:#4daaff; }
+#btn-move.active, #btn-move:active { background:#4daaff; color:#0a0e1a; }
+.btn:disabled { opacity:0.3; cursor:default; }
 
-  #ui-bottom {
-    position: absolute;
-    bottom: 0; left: 0; right: 0;
-    z-index: 10;
-    padding: 12px 16px 20px;
-    background: linear-gradient(to top, rgba(10,14,26,0.95), transparent);
-    display: flex;
-    gap: 10px;
-    align-items: center;
-  }
+#hint { text-align:center; font-size:11px; color:#4a6a8a; padding:3px 0; letter-spacing:0.04em; flex-shrink:0; background:rgba(10,14,26,0.95); }
 
-  .btn {
-    flex: 1;
-    padding: 12px 8px;
-    border: 1px solid;
-    border-radius: 6px;
-    font-family: 'Courier New', monospace;
-    font-size: 12px;
-    font-weight: bold;
-    letter-spacing: 0.06em;
-    text-transform: uppercase;
-    cursor: pointer;
-    transition: all 0.15s;
-    background: transparent;
-  }
-
-  #btn-fire {
-    border-color: #e05050;
-    color: #e05050;
-  }
-  #btn-fire:hover:not(:disabled), #btn-fire.active {
-    background: #e05050;
-    color: #fff;
-    box-shadow: 0 0 16px rgba(224,80,80,0.5);
-  }
-
-  #btn-move {
-    border-color: #4daaff;
-    color: #4daaff;
-  }
-  #btn-move:hover:not(:disabled), #btn-move.active {
-    background: #4daaff;
-    color: #0a0e1a;
-    box-shadow: 0 0 16px rgba(77,170,255,0.4);
-  }
-
-  .btn:disabled { opacity: 0.3; cursor: default; }
-
-  #hint {
-    text-align: center;
-    font-size: 11px;
-    color: #4a6a8a;
-    padding: 4px 0;
-    letter-spacing: 0.04em;
-  }
-
-  /* Overlay screens */
-  .overlay {
-    position: absolute;
-    inset: 0;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    background: rgba(10,14,26,0.92);
-    z-index: 100;
-    gap: 20px;
-    text-align: center;
-    padding: 24px;
-  }
-  .overlay h1 {
-    font-size: 28px;
-    letter-spacing: 0.12em;
-    text-transform: uppercase;
-  }
-  .overlay p { font-size: 14px; color: #7ab3d4; line-height: 1.6; }
-  .overlay .big { font-size: 48px; }
-  .overlay-btn {
-    padding: 14px 36px;
-    border: 2px solid #4daaff;
-    border-radius: 8px;
-    background: transparent;
-    color: #4daaff;
-    font-family: 'Courier New', monospace;
-    font-size: 14px;
-    font-weight: bold;
-    letter-spacing: 0.1em;
-    text-transform: uppercase;
-    cursor: pointer;
-    transition: all 0.2s;
-  }
-  .overlay-btn:hover { background: #4daaff; color: #0a0e1a; }
-
-  .label-my { color: #4daaff; }
-  .label-enemy { color: #e05050; }
-
-  #field-labels {
-    position: absolute;
-    top: 56px;
-    left: 0; right: 0;
-    display: flex;
-    justify-content: space-around;
-    pointer-events: none;
-    z-index: 5;
-  }
-  .field-label {
-    font-size: 11px;
-    letter-spacing: 0.1em;
-    text-transform: uppercase;
-    padding: 3px 10px;
-    border-radius: 3px;
-  }
-  .field-label.my { color: #4daaff; border: 1px solid rgba(77,170,255,0.3); }
-  .field-label.enemy { color: #e05050; border: 1px solid rgba(224,80,80,0.3); }
+/* Overlays */
+.overlay {
+  position:fixed; inset:0;
+  display:flex; flex-direction:column;
+  align-items:center; justify-content:center;
+  background:rgba(10,14,26,0.95);
+  z-index:100; gap:18px; text-align:center; padding:24px;
+}
+.overlay h1 { font-size:26px; letter-spacing:0.12em; text-transform:uppercase; }
+.overlay p { font-size:13px; color:#7ab3d4; line-height:1.6; }
+.overlay .big { font-size:52px; }
+.overlay-btn {
+  padding:14px 36px; border:2px solid #4daaff; border-radius:8px;
+  background:transparent; color:#4daaff;
+  font-family:'Courier New',monospace; font-size:14px;
+  font-weight:bold; letter-spacing:0.1em; text-transform:uppercase;
+  cursor:pointer;
+}
+.overlay-btn:active { background:#4daaff; color:#0a0e1a; }
 </style>
 </head>
 <body>
 
-<!-- Overlay: Menu -->
 <div class="overlay" id="screen-menu">
   <div class="big">🎯</div>
   <h1>Артилерія</h1>
@@ -178,14 +97,12 @@
   <button class="overlay-btn" onclick="findGame()">Знайти суперника</button>
 </div>
 
-<!-- Overlay: Waiting -->
 <div class="overlay" id="screen-waiting" style="display:none">
   <div class="big">⏳</div>
   <h1>Пошук...</h1>
   <p>Чекаємо на суперника</p>
 </div>
 
-<!-- Overlay: Game Over -->
 <div class="overlay" id="screen-gameover" style="display:none">
   <div class="big" id="gameover-icon">🏆</div>
   <h1 id="gameover-title">Перемога!</h1>
@@ -193,36 +110,328 @@
   <button class="overlay-btn" onclick="resetGame()">Зіграти ще раз</button>
 </div>
 
-<!-- Overlay: Opponent Left -->
 <div class="overlay" id="screen-left" style="display:none">
   <div class="big">🚪</div>
   <h1>Суперник вийшов</h1>
   <button class="overlay-btn" onclick="resetGame()">Повернутись</button>
 </div>
 
-<!-- Game UI -->
 <div id="ui-top">
   <div id="status">Очікування...</div>
   <div id="timer-bar"><div id="timer-fill"></div></div>
 </div>
 
-<div id="field-labels" style="display:none">
-  <div class="field-label my">Моя сторона</div>
-  <div class="field-label enemy">Сторона ворога</div>
+<div id="field-labels">
+  <div class="field-label enemy">⬆ Сторона ворога</div>
+  <div class="field-label my">⬇ Моя сторона</div>
 </div>
 
-<div id="canvas-container">
-  <canvas id="three-canvas"></canvas>
+<div id="canvas-wrap">
+  <canvas id="gc"></canvas>
 </div>
 
+<div id="hint"></div>
 <div id="ui-bottom">
   <button class="btn" id="btn-fire" disabled onclick="selectMode('fire')">🔥 Вогонь</button>
   <button class="btn" id="btn-move" disabled onclick="selectMode('move')">↔ Рухатись</button>
 </div>
-<div id="hint"></div>
 
-<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
-<script src="game.js"></script>
+<script>
+const GRID = 6;
+const GAP = 3; // gap between fields in cells
+
+let ws=null, playerIndex=null, myTurn=false, mode=null, selectedCannonIdx=null;
+let myCannons=[], enemyCannons=[], myAlive=[true,true], enemyAlive=[true,true];
+let particles=[];
+let animFrame=null;
+
+const statusEl=document.getElementById('status');
+const timerFill=document.getElementById('timer-fill');
+const hintEl=document.getElementById('hint');
+const btnFire=document.getElementById('btn-fire');
+const btnMove=document.getElementById('btn-move');
+const fieldLabels=document.getElementById('field-labels');
+const canvas=document.getElementById('gc');
+const ctx=canvas.getContext('2d');
+let timerInterval=null, turnDuration=5, turnEndTime=0;
+
+let CELL=40, OX=0, EN_TOP=0, MY_TOP=0;
+
+function layout(){
+  const wrap=document.getElementById('canvas-wrap');
+  const W=wrap.clientWidth, H=wrap.clientHeight;
+  // Total height needed: 2 fields + gap
+  const totalCells = GRID*2 + GAP;
+  CELL = Math.min(Math.floor(W/GRID), Math.floor(H/totalCells));
+  const cw = GRID*CELL;
+  const ch = totalCells*CELL;
+  canvas.width=cw; canvas.height=ch;
+  OX=0;
+  EN_TOP=0;
+  MY_TOP=(GRID+GAP)*CELL;
+}
+
+function draw(){
+  ctx.clearRect(0,0,canvas.width,canvas.height);
+
+  if(!myCannons.length && !enemyCannons.length) return;
+
+  // Enemy field (top)
+  drawField(EN_TOP, false);
+  // My field (bottom)
+  drawField(MY_TOP, true);
+
+  // Gap label
+  ctx.fillStyle='#1a2535';
+  ctx.fillRect(0, GRID*CELL, canvas.width, GAP*CELL);
+  ctx.fillStyle='#334455';
+  ctx.font=`bold ${Math.round(CELL*0.35)}px Courier New`;
+  ctx.textAlign='center';
+  ctx.textBaseline='middle';
+  ctx.fillText('⚡ ЛІНІЯ ФРОНТУ ⚡', canvas.width/2, GRID*CELL+GAP*CELL/2);
+
+  // Draw cannons
+  myCannons.forEach((c,i)=>{ if(myAlive[i]) drawCannon(MY_TOP, c.x, c.y, false, i===selectedCannonIdx && mode==='move'); });
+  enemyCannons.forEach((c,i)=>{ if(enemyAlive[i]) drawCannon(EN_TOP, c.x, c.y, true, false); });
+
+  // Draw particles
+  drawParticles();
+}
+
+function drawField(top, isMy){
+  for(let x=0;x<GRID;x++){
+    for(let z=0;z<GRID;z++){
+      const dark=(x+z)%2===0;
+      let color;
+      if(isMy){
+        color=dark?'#0d1e35':'#1a3a5c';
+      } else {
+        color=dark?'#2a0d0d':'#3d1010';
+      }
+
+      // Highlight enemy cells in fire mode
+      if(!isMy && mode==='fire' && myTurn){
+        color=dark?'#3a1010':'#501515';
+      }
+      // Highlight my cells in move mode (after cannon selected)
+      if(isMy && mode==='move' && selectedCannonIdx!==null && myTurn){
+        color=dark?'#0d1e45':'#1a3a7c';
+      }
+
+      ctx.fillStyle=color;
+      ctx.fillRect(OX+x*CELL, top+z*CELL, CELL-1, CELL-1);
+    }
+  }
+  // Border
+  ctx.strokeStyle=isMy?'#2255aa':'#aa2222';
+  ctx.lineWidth=2;
+  ctx.strokeRect(OX+0.5, top+0.5, GRID*CELL-1, GRID*CELL-1);
+}
+
+function drawCannon(top, gx, gz, isEnemy, selected){
+  const cx=OX+gx*CELL+CELL/2;
+  const cy=top+gz*CELL+CELL/2;
+  const r=CELL*0.32;
+
+  // Glow if selected
+  if(selected){
+    ctx.beginPath();
+    ctx.arc(cx,cy,r+6,0,Math.PI*2);
+    ctx.fillStyle='rgba(77,170,255,0.3)';
+    ctx.fill();
+  }
+
+  // Body
+  ctx.beginPath();
+  ctx.arc(cx,cy,r,0,Math.PI*2);
+  ctx.fillStyle=isEnemy?'#8b1a1a':'#1a4a8b';
+  ctx.fill();
+  ctx.strokeStyle=isEnemy?'#cc2222':'#2266cc';
+  ctx.lineWidth=2;
+  ctx.stroke();
+
+  // Barrel (pointing up for enemy, down for mine — visual indicator)
+  const barLen=r*1.2;
+  const barDir=isEnemy?-1:1; // enemy barrel points up screen
+  ctx.beginPath();
+  ctx.moveTo(cx,cy);
+  ctx.lineTo(cx,cy+barDir*barLen);
+  ctx.strokeStyle=isEnemy?'#ff4444':'#44aaff';
+  ctx.lineWidth=Math.max(3, CELL*0.12);
+  ctx.lineCap='round';
+  ctx.stroke();
+
+  // Highlight ring pulse
+  const t=Date.now()*0.003;
+  const alpha=0.3+Math.sin(t*2)*0.2;
+  ctx.beginPath();
+  ctx.arc(cx,cy,r+3,0,Math.PI*2);
+  ctx.strokeStyle=isEnemy?`rgba(255,50,50,${alpha})`:`rgba(50,150,255,${alpha})`;
+  ctx.lineWidth=2;
+  ctx.stroke();
+}
+
+function drawParticles(){
+  particles.forEach(p=>{
+    ctx.globalAlpha=Math.max(0,p.life);
+    ctx.beginPath();
+    ctx.arc(p.x,p.y,p.r,0,Math.PI*2);
+    ctx.fillStyle=p.color;
+    ctx.fill();
+  });
+  ctx.globalAlpha=1;
+}
+
+function spawnExplosion(top, gx, gz){
+  const cx=OX+gx*CELL+CELL/2;
+  const cy=top+gz*CELL+CELL/2;
+  for(let i=0;i<16;i++){
+    const a=Math.random()*Math.PI*2;
+    const sp=(2+Math.random()*4)*CELL/40;
+    const hue=Math.floor(Math.random()*30+10);
+    particles.push({x:cx,y:cy,vx:Math.cos(a)*sp,vy:Math.sin(a)*sp,r:3+Math.random()*5,life:1,decay:0.025+Math.random()*0.02,color:`hsl(${hue},100%,60%)`});
+  }
+}
+
+function spawnMiss(top, gx, gz){
+  const cx=OX+gx*CELL+CELL/2;
+  const cy=top+gz*CELL+CELL/2;
+  for(let i=0;i<7;i++){
+    const a=Math.random()*Math.PI*2;
+    const sp=(1+Math.random()*2)*CELL/40;
+    particles.push({x:cx,y:cy,vx:Math.cos(a)*sp,vy:Math.sin(a)*sp,r:2+Math.random()*3,life:0.8,decay:0.03,color:'#6688aa'});
+  }
+}
+
+function updateParticles(){
+  for(let i=particles.length-1;i>=0;i--){
+    const p=particles[i];
+    p.x+=p.vx; p.y+=p.vy; p.vy+=0.15;
+    p.life-=p.decay;
+    if(p.life<=0) particles.splice(i,1);
+  }
+}
+
+function gameLoop(){
+  updateParticles();
+  draw();
+  animFrame=requestAnimationFrame(gameLoop);
+}
+
+// Click handling
+canvas.addEventListener('click', e=>{
+  if(!myTurn||!mode) return;
+  const rect=canvas.getBoundingClientRect();
+  const scaleX=canvas.width/rect.width;
+  const scaleY=canvas.height/rect.height;
+  const mx=(e.clientX-rect.left)*scaleX;
+  const my=(e.clientY-rect.top)*scaleY;
+
+  if(mode==='fire'){
+    // Check enemy field click
+    if(my>=EN_TOP && my<EN_TOP+GRID*CELL && mx>=OX && mx<OX+GRID*CELL){
+      const gx=Math.floor((mx-OX)/CELL);
+      const gz=Math.floor((my-EN_TOP)/CELL);
+      sendAction({type:'fire',x:gx,y:gz});
+      disableButtons(); hintEl.textContent='';
+    }
+  } else if(mode==='move'){
+    if(selectedCannonIdx===null){
+      // Check my cannons
+      myCannons.forEach((c,i)=>{
+        if(!myAlive[i])return;
+        const cx=OX+c.x*CELL+CELL/2, cy=MY_TOP+c.y*CELL+CELL/2;
+        const dx=(e.clientX-rect.left)*scaleX-cx, dy=(e.clientY-rect.top)*scaleY-cy;
+        if(Math.sqrt(dx*dx+dy*dy)<CELL*0.5){ selectedCannonIdx=i; hintEl.textContent='Виберіть нову позицію'; }
+      });
+    } else {
+      // Check my field
+      if(my>=MY_TOP && my<MY_TOP+GRID*CELL && mx>=OX && mx<OX+GRID*CELL){
+        const gx=Math.floor((mx-OX)/CELL);
+        const gz=Math.floor((my-MY_TOP)/CELL);
+        sendAction({type:'move',cannonIndex:selectedCannonIdx,x:gx,y:gz});
+        disableButtons(); selectedCannonIdx=null; hintEl.textContent='';
+      }
+    }
+  }
+});
+
+// Timer
+function startTimer(s){
+  clearInterval(timerInterval); turnDuration=s; turnEndTime=Date.now()+s*1000;
+  timerInterval=setInterval(()=>{
+    const left=(turnEndTime-Date.now())/1000, pct=Math.max(0,left/turnDuration)*100;
+    timerFill.style.width=pct+'%';
+    timerFill.style.background=pct>40?'#4daaff':pct>20?'#ffaa00':'#ff4444';
+    if(left<=0)clearInterval(timerInterval);
+  },80);
+}
+
+function selectMode(m){
+  if(!myTurn)return; mode=m; selectedCannonIdx=null;
+  if(mode==='fire'){btnFire.classList.add('active');btnMove.classList.remove('active');hintEl.textContent='Виберіть клітинку для пострілу';}
+  else{btnMove.classList.add('active');btnFire.classList.remove('active');hintEl.textContent='Виберіть свою гармату';}
+}
+
+// WebSocket
+const SERVER_URL=(()=>{const p=location.protocol==='https:'?'wss:':'ws:';return `${p}//${location.host}`;})();
+function findGame(){
+  showScreen('screen-waiting');
+  ws=new WebSocket(SERVER_URL);
+  ws.onopen=()=>ws.send(JSON.stringify({type:'find_game'}));
+  ws.onmessage=(e)=>handleMessage(JSON.parse(e.data));
+  ws.onerror=()=>{alert('Помилка підключення');resetGame();};
+}
+function sendAction(a){if(ws&&ws.readyState===1)ws.send(JSON.stringify({type:'action',action:a}));}
+
+function handleMessage(msg){
+  if(msg.type==='game_start'){
+    playerIndex=msg.playerIndex; myCannons=msg.myCannons; enemyCannons=msg.enemyCannons;
+    myAlive=[true,true]; enemyAlive=[true,true];
+    showScreen(null); fieldLabels.style.display='flex';
+    layout(); gameLoop();
+    setStatus(msg.currentTurn===playerIndex?'Ваш хід':'Хід суперника');
+  }
+  if(msg.type==='turn_start'){
+    myTurn=msg.yourTurn; mode=null; selectedCannonIdx=null; startTimer(msg.timeLeft);
+    if(myTurn){setStatus('Ваш хід!');btnFire.disabled=false;btnMove.disabled=false;hintEl.textContent='Виберіть дію';btnFire.classList.remove('active');btnMove.classList.remove('active');}
+    else{setStatus('Хід суперника...');disableButtons();hintEl.textContent='';}
+  }
+  if(msg.type==='turn_result'){
+    const action=msg.action; myCannons=msg.myCannons; enemyAlive=msg.enemyAlive;
+    if(action&&action.type==='fire'){
+      if(!myTurn){if(msg.hit){spawnExplosion(MY_TOP,action.x,action.y);myAlive[msg.cannonIndex]=false;}else spawnMiss(MY_TOP,action.x,action.y);}
+      else{if(msg.hit){spawnExplosion(EN_TOP,action.x,action.y);enemyAlive[msg.cannonIndex]=false;}else spawnMiss(EN_TOP,action.x,action.y);}
+    }
+    myTurn=false;
+  }
+  if(msg.type==='game_over'){
+    clearInterval(timerInterval); fieldLabels.style.display='none';
+    document.getElementById('gameover-icon').textContent=msg.youWin?'🏆':'💥';
+    document.getElementById('gameover-title').textContent=msg.youWin?'Перемога!':'Поразка';
+    document.getElementById('gameover-sub').textContent=msg.youWin?'Ви знищили всі гармати противника!':'Ваші гармати знищено.';
+    showScreen('screen-gameover');
+  }
+  if(msg.type==='opponent_left'){clearInterval(timerInterval);fieldLabels.style.display='none';showScreen('screen-left');}
+}
+
+function showScreen(id){
+  ['screen-menu','screen-waiting','screen-gameover','screen-left'].forEach(s=>{
+    document.getElementById(s).style.display=s===id?'flex':'none';
+  });
+}
+function setStatus(t){statusEl.textContent=t;}
+function disableButtons(){btnFire.disabled=true;btnMove.disabled=true;btnFire.classList.remove('active');btnMove.classList.remove('active');}
+function resetGame(){
+  if(ws){ws.close();ws=null;} clearInterval(timerInterval);
+  if(animFrame){cancelAnimationFrame(animFrame);animFrame=null;}
+  disableButtons(); mode=null; selectedCannonIdx=null; myTurn=false;
+  timerFill.style.width='100%'; hintEl.textContent=''; fieldLabels.style.display='none';
+  setStatus('Очікування...'); myCannons=[]; enemyCannons=[]; particles=[];
+  ctx.clearRect(0,0,canvas.width,canvas.height);
+  showScreen('screen-menu');
+}
+window.addEventListener('resize',()=>{if(myCannons.length){layout();}});
+</script>
 </body>
 </html>
-
