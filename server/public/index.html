@@ -159,7 +159,7 @@ function layout(){
   const W=wrap.clientWidth;
   // Reserve space for: ui-top~36px, field-labels~26px, hint~18px, ui-bottom~56px + gaps ~10px = ~146px
   const reserved=150;
-  const H = Math.floor(window.innerHeight * 0.55);
+  const H = Math.floor(window.innerHeight * 0.45);
   const totalRows=GRID*2+GAP;
   CELL=Math.min(Math.floor(W/GRID), Math.floor(H/totalRows));
   CELL=Math.max(CELL, 20); // minimum cell size
