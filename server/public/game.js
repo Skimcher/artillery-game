@@ -53,8 +53,9 @@ function resizeRenderer() {
     camera.aspect = w / h;
     camera.updateProjectionMatrix();
     // Adjust camera height based on aspect ratio
-    const dist = w < h ? 16 : 12;
-    camera.position.set(0, dist, 2);
+    const dist = w < h ? 18 : 13;
+    const totalZ = GRID * CELL + FIELD_GAP;
+    camera.position.set(0, dist, totalZ * 0.3);
     camera.lookAt(0, 0, 0);
   }
 }
