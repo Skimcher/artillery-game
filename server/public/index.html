@@ -7,7 +7,7 @@
 <style>
 * { margin:0; padding:0; box-sizing:border-box; }
 body {
-  background:#f5f0e8;
+  background:#e8dfc8;
   font-family:'Georgia',serif;
   color:#3a2a1a;
   height:100vh;
@@ -16,7 +16,6 @@ body {
   overflow:hidden;
   user-select:none;
 }
-
 #ui-top {
   display:flex;
   justify-content:space-between;
@@ -27,13 +26,7 @@ body {
   flex-shrink:0;
   box-shadow:0 2px 8px rgba(0,0,0,0.3);
 }
-#status {
-  font-size:12px;
-  letter-spacing:0.06em;
-  color:#3a1a00;
-  text-transform:uppercase;
-  font-weight:bold;
-}
+#status { font-size:12px; letter-spacing:0.06em; color:#3a1a00; text-transform:uppercase; font-weight:bold; }
 #timer-bar { width:90px; height:7px; background:#8b6914; border-radius:4px; overflow:hidden; border:1px solid #5a4000; }
 #timer-fill { height:100%; width:100%; background:#e8a020; border-radius:4px; transition:background 0.3s; }
 
@@ -45,12 +38,20 @@ body {
   border-bottom:2px solid #8b6914;
   flex-shrink:0;
 }
-.field-label { font-size:10px; letter-spacing:0.08em; text-transform:uppercase; padding:2px 10px; border-radius:3px; font-weight:bold; }
+.field-label { font-size:10px; letter-spacing:0.07em; text-transform:uppercase; padding:2px 10px; border-radius:3px; font-weight:bold; }
 .field-label.enemy { color:#8b0000; border:1px solid #8b0000; background:rgba(139,0,0,0.1); }
 .field-label.my { color:#00408b; border:1px solid #00408b; background:rgba(0,64,139,0.1); }
 
-#canvas-wrap { flex:1; display:flex; align-items:center; justify-content:center; overflow:hidden; min-height:0; max-height:45vh; background:#e8dcc8; }
-canvas { display:block; image-rendering:pixelated; }
+#canvas-wrap {
+  flex:1;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  overflow:hidden;
+  min-height:0;
+  background:#d4c9a8;
+}
+canvas { display:block; }
 
 #hint { text-align:center; font-size:10px; color:#6b4c2a; padding:2px 0; letter-spacing:0.03em; flex-shrink:0; background:#d4b483; min-height:18px; border-top:1px solid #b8915a; }
 
@@ -75,12 +76,11 @@ canvas { display:block; image-rendering:pixelated; }
 #btn-move.active { background:#00408b; color:#fff; box-shadow:0 0 12px rgba(0,64,139,0.4); }
 .btn:disabled { opacity:0.35; cursor:default; }
 
-/* Overlays */
 .overlay {
   position:fixed; inset:0;
   display:flex; flex-direction:column;
   align-items:center; justify-content:center;
-  background:rgba(245,240,232,0.97);
+  background:rgba(232,223,200,0.97);
   z-index:100; gap:16px; text-align:center; padding:24px;
 }
 .overlay h1 { font-size:26px; letter-spacing:0.1em; text-transform:uppercase; color:#3a1a00; }
@@ -94,7 +94,6 @@ canvas { display:block; image-rendering:pixelated; }
   box-shadow:0 3px 8px rgba(0,0,0,0.2);
 }
 .overlay-btn:active { background:#8b6914; color:#fff; }
-.title-img { font-size:40px; }
 </style>
 </head>
 <body>
@@ -138,378 +137,491 @@ canvas { display:block; image-rendering:pixelated; }
 </div>
 
 <script>
+// ─── ISO MATH ───────────────────────────────────────────────
+// Standard 2:1 isometric: tile width = TW, height = TH = TW/2
+// grid (gx,gz) → screen (sx,sy):
+//   sx = origin.x + (gx - gz) * TW/2
+//   sy = origin.y + (gx + gz) * TH/2
+
 const GRID = 6;
-const GAP = 2;
 const MOVE_RANGE = 4;
 const TURN_TIME = 9;
 
-// 2.5D isometric offset per cell
-const ISO_Y_RATIO = 0.38; // how much Y shifts per row (simulates depth)
+let TW = 60; // tile width (pixels), set in layout()
+let TH = 30; // tile height = TW/2
 
+// Origins for each field (top-left corner in iso space)
+let myOrigin   = {x:0, y:0};
+let enOrigin   = {x:0, y:0};
+
+// Convert grid coords → screen coords for a field
+function toScreen(origin, gx, gz) {
+  return {
+    x: origin.x + (gx - gz) * TW / 2,
+    y: origin.y + (gx + gz) * TH / 2
+  };
+}
+
+// Convert screen click → grid coords (inverse iso)
+function toGrid(origin, sx, sy) {
+  const rx = sx - origin.x;
+  const ry = sy - origin.y;
+  const gx = (rx / (TW / 2) + ry / (TH / 2)) / 2;
+  const gz = (ry / (TH / 2) - rx / (TW / 2)) / 2;
+  return { gx: Math.floor(gx), gz: Math.floor(gz) };
+}
+
+// Check if grid coords are in bounds
+function inBounds(gx, gz) {
+  return gx >= 0 && gx < GRID && gz >= 0 && gz < GRID;
+}
+
+// ─── STATE ──────────────────────────────────────────────────
 let ws=null, playerIndex=null, myTurn=false, mode=null, selectedCannonIdx=null;
 let myCannons=[], enemyCannons=[];
 let myAlive=[true,true], enemyAlive=[true,true];
 let enemyRevealed=[false,false];
 let particles=[];
 let animFrame=null;
-
-const statusEl=document.getElementById('status');
-const timerFill=document.getElementById('timer-fill');
-const hintEl=document.getElementById('hint');
-const btnFire=document.getElementById('btn-fire');
-const btnMove=document.getElementById('btn-move');
-const fieldLabels=document.getElementById('field-labels');
-const canvas=document.getElementById('gc');
-const ctx=canvas.getContext('2d');
-let timerInterval=null, turnDuration=TURN_TIME, turnEndTime=0;
-let CELL=40, OX=0, EN_TOP=0, MY_TOP=0;
 let moveCells=[];
 
-// Dirt texture pattern
-let dirtPattern=null;
-function makeDirtPattern(baseColor, darkColor){
-  const pc=document.createElement('canvas');
-  pc.width=8; pc.height=8;
-  const px=pc.getContext('2d');
-  px.fillStyle=baseColor;
-  px.fillRect(0,0,8,8);
-  // Random dots for texture
-  const dots=[[1,1],[3,5],[5,2],[6,6],[2,7],[7,3],[4,0],[0,4]];
-  dots.forEach(([x,y])=>{
-    px.fillStyle=darkColor;
-    px.fillRect(x,y,1,1);
-  });
-  return ctx.createPattern(pc,'repeat');
+const statusEl   = document.getElementById('status');
+const timerFill  = document.getElementById('timer-fill');
+const hintEl     = document.getElementById('hint');
+const btnFire    = document.getElementById('btn-fire');
+const btnMove    = document.getElementById('btn-move');
+const fieldLabels= document.getElementById('field-labels');
+const canvas     = document.getElementById('gc');
+const ctx        = canvas.getContext('2d');
+let timerInterval=null, turnDuration=TURN_TIME, turnEndTime=0;
+
+// ─── LAYOUT ─────────────────────────────────────────────────
+function layout() {
+  const wrap = document.getElementById('canvas-wrap');
+  const W = wrap.clientWidth;
+  const H = Math.floor(window.innerHeight * 0.55);
+
+  // Fit two isometric grids + gap vertically
+  // Each grid: height = (GRID-1+GRID-1)*TH/2 + TH = (2*GRID-1)*TH
+  // We need 2 grids + gap (2*TH) to fit in H
+  // total height = 2*(2*GRID-1)*TH + 2*TH = (4*GRID)*TH
+  // TH = H / (4*GRID)
+  TH = Math.max(12, Math.floor(H / (GRID * 4.5)));
+  TW = TH * 2;
+
+  // Canvas width: iso grid width = (GRID+GRID-1)*TW/2 ... actually max x span = (GRID-1)*TW
+  const gridW = (GRID - 1) * TW + TW;
+  const cw = Math.min(W, gridW + TW);
+  const ch = H;
+  canvas.width = cw;
+  canvas.height = ch;
+
+  // Each field's iso bounding box:
+  // leftmost point: origin + (0 - (GRID-1)) * TW/2 = origin - (GRID-1)*TW/2
+  // rightmost: origin + (GRID-1)*TW/2
+  // so center origin.x = cw/2
+  const ox = cw / 2;
+
+  // Enemy field: top portion
+  // top of field = enOrigin.y, bottom = enOrigin.y + (2*GRID-2)*TH/2
+  const fieldH = (GRID - 1) * TH;
+  const gapH = TH * 2;
+
+  enOrigin = { x: ox, y: TH };
+  myOrigin = { x: ox, y: enOrigin.y + fieldH + gapH };
 }
 
-function layout(){
-  const wrap=document.getElementById('canvas-wrap');
-  const W=wrap.clientWidth;
-  const H=Math.floor(window.innerHeight*0.45);
-  const totalRows=GRID*2+GAP;
-  CELL=Math.min(Math.floor(W/GRID), Math.floor(H/totalRows));
-  CELL=Math.max(CELL,18);
-  const cw=GRID*CELL, ch=totalRows*CELL;
-  canvas.width=cw; canvas.height=ch;
-  OX=0; EN_TOP=0; MY_TOP=(GRID+GAP)*CELL;
-  // Rebuild dirt patterns
-  dirtPattern=null; // will be created on first draw
-}
+// ─── DRAW ───────────────────────────────────────────────────
+function draw() {
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  if (!myCannons.length) return;
 
-// Draw isometric-style cell (trapezoid bottom edge for 2.5D feel)
-function drawIsoCell(x, y, w, h, fillColor, strokeColor, isoShift){
-  const shift=isoShift||0;
-  ctx.beginPath();
-  ctx.moveTo(x, y);
-  ctx.lineTo(x+w, y);
-  ctx.lineTo(x+w, y+h-shift);
-  ctx.lineTo(x, y+h);
-  ctx.closePath();
-  ctx.fillStyle=fillColor;
-  ctx.fill();
-  if(strokeColor){
-    ctx.strokeStyle=strokeColor;
-    ctx.lineWidth=0.5;
-    ctx.stroke();
-  }
-}
+  // Draw fields back-to-front (painter's algorithm: low gz first)
+  drawIsoField(enOrigin, false);
+  drawIsoField(myOrigin, true);
 
-function getFieldColors(isMy, dark, highlighted){
-  if(isMy){
-    if(highlighted) return dark?'#7a5c2a':'#a07840';
-    return dark?'#8b6520':'#a87c35';
-  } else {
-    if(highlighted) return dark?'#6b2020':'#8b3030';
-    return dark?'#7a3a15':'#954520';
-  }
-}
-
-function draw(){
-  ctx.clearRect(0,0,canvas.width,canvas.height);
-  if(!myCannons.length) return;
-
-  drawField(EN_TOP, false);
-  drawField(MY_TOP, true);
-
-  // Gap / front line
-  const gapY=GRID*CELL;
-  const gapH=GAP*CELL;
-  // Draw a no-man's land strip
-  const grad=ctx.createLinearGradient(0,gapY,0,gapY+gapH);
-  grad.addColorStop(0,'#c8a050');
-  grad.addColorStop(0.5,'#d4aa60');
-  grad.addColorStop(1,'#c8a050');
-  ctx.fillStyle=grad;
-  ctx.fillRect(0,gapY,canvas.width,gapH);
-  // Barbed wire lines
-  ctx.strokeStyle='#5a3a00';
-  ctx.lineWidth=1;
-  ctx.setLineDash([4,3]);
-  ctx.beginPath(); ctx.moveTo(0,gapY+gapH*0.35); ctx.lineTo(canvas.width,gapY+gapH*0.35); ctx.stroke();
-  ctx.beginPath(); ctx.moveTo(0,gapY+gapH*0.65); ctx.lineTo(canvas.width,gapY+gapH*0.65); ctx.stroke();
-  ctx.setLineDash([]);
-  // X marks on wire
-  for(let xi=0;xi<GRID;xi++){
-    const wx=xi*CELL+CELL/2;
-    ['0.35','0.65'].forEach(r=>{
-      const wy=gapY+gapH*parseFloat(r);
-      ctx.strokeStyle='#5a3a00'; ctx.lineWidth=1.5;
-      ctx.beginPath(); ctx.moveTo(wx-4,wy-3); ctx.lineTo(wx+4,wy+3); ctx.stroke();
-      ctx.beginPath(); ctx.moveTo(wx+4,wy-3); ctx.lineTo(wx-4,wy+3); ctx.stroke();
-    });
-  }
-  ctx.fillStyle='#3a1a00';
-  ctx.font=`bold ${Math.round(CELL*0.28)}px Georgia`;
-  ctx.textAlign='center'; ctx.textBaseline='middle';
-  ctx.fillText('— NO MAN\'S LAND —', canvas.width/2, gapY+gapH/2);
+  // No Man's Land label
+  const midY = enOrigin.y + (GRID-1)*TH + TH*0.8;
+  ctx.font = `bold ${Math.max(9, TH*0.55)}px Georgia`;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillStyle = '#7a5a20';
+  ctx.fillText('— NO MAN\'S LAND —', canvas.width/2, midY);
 
   // Move highlights
-  if(mode==='move'&&selectedCannonIdx!==null){
-    moveCells.forEach(({x,y})=>{
-      ctx.fillStyle='rgba(0,80,180,0.28)';
-      ctx.fillRect(OX+x*CELL+1,MY_TOP+y*CELL+1,CELL-2,CELL-2);
-      ctx.strokeStyle='#4488ff';
-      ctx.lineWidth=2; ctx.setLineDash([3,2]);
-      ctx.strokeRect(OX+x*CELL+2,MY_TOP+y*CELL+2,CELL-4,CELL-4);
-      ctx.setLineDash([]);
-    });
+  if (mode === 'move' && selectedCannonIdx !== null) {
+    moveCells.forEach(({x, y}) => drawIsoHighlight(myOrigin, x, y, 'rgba(40,120,255,0.35)', '#4488ff'));
+  }
+  // Fire highlights
+  if (mode === 'fire' && myTurn) {
+    for (let x=0; x<GRID; x++) for (let z=0; z<GRID; z++)
+      drawIsoHighlight(enOrigin, x, z, 'rgba(200,30,30,0.15)', 'rgba(200,30,30,0.4)');
   }
 
-  // My cannons
-  myCannons.forEach((c,i)=>{
-    if(myAlive[i]) drawCannon25D(MY_TOP,c.x,c.y,false,i===selectedCannonIdx);
-    else drawDestroyed(MY_TOP,c.x,c.y);
-  });
-  // Enemy cannons — hidden unless revealed
-  enemyCannons.forEach((c,i)=>{
-    if(enemyRevealed[i]){
-      if(enemyAlive[i]) drawCannon25D(EN_TOP,c.x,c.y,true,false);
-      else drawDestroyed(EN_TOP,c.x,c.y);
+  // Draw cannons (back rows first for painter's order)
+  for (let gz = 0; gz < GRID; gz++) {
+    for (let gx = 0; gx < GRID; gx++) {
+      // My cannons
+      myCannons.forEach((c, i) => {
+        if (c.x === gx && c.y === gz) {
+          if (myAlive[i]) drawIsoCannon(myOrigin, gx, gz, false, i === selectedCannonIdx);
+          else drawIsoDestroyed(myOrigin, gx, gz);
+        }
+      });
+      // Enemy cannons — hidden unless revealed
+      enemyCannons.forEach((c, i) => {
+        if (c.x === gx && c.y === gz && enemyRevealed[i]) {
+          if (enemyAlive[i]) drawIsoCannon(enOrigin, gx, gz, true, false);
+          else drawIsoDestroyed(enOrigin, gx, gz);
+        }
+      });
     }
-  });
+  }
 
   drawParticles();
 }
 
-function drawField(top, isMy){
-  const isoShift=Math.round(CELL*ISO_Y_RATIO);
-  for(let x=0;x<GRID;x++){
-    for(let z=0;z<GRID;z++){
-      const dark=(x+z)%2===0;
-      const highlighted=(!isMy&&mode==='fire'&&myTurn)||(isMy&&mode==='move'&&selectedCannonIdx!==null&&myTurn);
-      const baseColor=getFieldColors(isMy,dark,highlighted);
-
-      // Base cell
-      ctx.fillStyle=baseColor;
-      ctx.fillRect(OX+x*CELL,top+z*CELL,CELL,CELL);
-
-      // Dirt texture dots
-      const dots=dark?[[2,2],[5,5],[1,6],[6,1],[3,4]]:[[1,3],[4,1],[6,5],[2,6],[5,3]];
-      const dotColor=dark?(isMy?'#7a5510':'#6a2a00'):(isMy?'#9a6e1a':'#7a2800');
-      dots.forEach(([dx,dz])=>{
-        ctx.fillStyle=dotColor;
-        ctx.fillRect(OX+x*CELL+dx*(CELL/8),top+z*CELL+dz*(CELL/8),Math.max(1,CELL/10),Math.max(1,CELL/10));
-      });
-
-      // 2.5D bottom edge (shadow) — makes cells look like raised tiles
-      ctx.fillStyle=dark?(isMy?'#5a3a00':'#4a1800'):(isMy?'#7a5010':'#6a2200');
-      ctx.fillRect(OX+x*CELL,top+z*CELL+CELL-Math.max(2,CELL/12),CELL,Math.max(2,CELL/12));
-
-      // Right edge shadow
-      ctx.fillStyle=dark?(isMy?'#6a4800':'#581a00'):(isMy?'#8a5a10':'#7a2800');
-      ctx.fillRect(OX+x*CELL+CELL-Math.max(2,CELL/14),top+z*CELL,Math.max(2,CELL/14),CELL);
-
-      // Cell border
-      ctx.strokeStyle=isMy?'rgba(90,50,0,0.4)':'rgba(90,20,0,0.4)';
-      ctx.lineWidth=0.5;
-      ctx.strokeRect(OX+x*CELL+0.5,top+z*CELL+0.5,CELL-1,CELL-1);
+function drawIsoField(origin, isMy) {
+  // Draw tiles back-to-front: gz=0 first (farthest), gz=GRID-1 last (nearest)
+  for (let gz = 0; gz < GRID; gz++) {
+    for (let gx = 0; gx < GRID; gx++) {
+      const p = toScreen(origin, gx, gz);
+      drawIsoTile(p.x, p.y, gx, gz, isMy);
     }
   }
-  // Field border
-  ctx.strokeStyle=isMy?'#1a3a6a':'#6a1a00';
-  ctx.lineWidth=3;
-  ctx.strokeRect(OX+1,top+1,GRID*CELL-2,GRID*CELL-2);
 }
 
-// 2.5D cannon: draws base, body, and barrel with perspective
-function drawCannon25D(top, gx, gz, isEnemy, selected){
-  const cx=OX+gx*CELL+CELL/2;
-  const cy=top+gz*CELL+CELL*0.65; // slightly below cell center for 2.5D
-  const s=CELL*0.38; // scale
+function drawIsoTile(sx, sy, gx, gz, isMy) {
+  const dark = (gx + gz) % 2 === 0;
 
-  if(selected){
-    ctx.beginPath(); ctx.arc(cx,cy,s+8,0,Math.PI*2);
-    ctx.fillStyle='rgba(0,100,220,0.2)'; ctx.fill();
+  // Top face colors — earthy browns
+  let topColor, leftColor, rightColor;
+  if (isMy) {
+    topColor   = dark ? '#8b6520' : '#a87c35';
+    leftColor  = dark ? '#6a4a10' : '#8a5e22';
+    rightColor = dark ? '#7a5518' : '#9a6c2a';
+  } else {
+    topColor   = dark ? '#7a3a15' : '#954520';
+    leftColor  = dark ? '#5a2a08' : '#743010';
+    rightColor = dark ? '#6a3010' : '#843818';
   }
 
-  // Shadow on ground
-  ctx.beginPath();
-  ctx.ellipse(cx,cy+s*0.3,s*0.9,s*0.25,0,0,Math.PI*2);
-  ctx.fillStyle='rgba(0,0,0,0.25)'; ctx.fill();
+  const hw = TW / 2;
+  const hh = TH / 2;
+  const depth = Math.max(3, TH * 0.38); // side depth
 
-  // Cannon base (3D box look)
-  const bw=s*1.3, bh=s*0.55, bd=s*0.3;
-  const bx=cx-bw/2, by=cy-bh/2;
-  // Top face
-  ctx.fillStyle=isEnemy?'#8b2020':'#204080';
-  ctx.fillRect(bx,by-bd,bw,bh);
-  // Front face
-  ctx.fillStyle=isEnemy?'#6b1010':'#162d5a';
-  ctx.fillRect(bx,by-bd+bh,bw,bd);
-  // Right side face
+  // Top face (diamond)
   ctx.beginPath();
-  ctx.moveTo(bx+bw,by-bd); ctx.lineTo(bx+bw+bd*0.6,by-bd*0.5);
-  ctx.lineTo(bx+bw+bd*0.6,by+bh-bd*0.5); ctx.lineTo(bx+bw,by+bh);
+  ctx.moveTo(sx,      sy - hh);  // top
+  ctx.lineTo(sx + hw, sy);       // right
+  ctx.lineTo(sx,      sy + hh);  // bottom
+  ctx.lineTo(sx - hw, sy);       // left
   ctx.closePath();
-  ctx.fillStyle=isEnemy?'#4a0a0a':'#0e1f3a'; ctx.fill();
+  ctx.fillStyle = topColor;
+  ctx.fill();
 
-  // Wheels (two circles)
-  [-bw*0.28,bw*0.28].forEach(wx=>{
-    const wr=s*0.22;
-    // Wheel shadow
-    ctx.beginPath(); ctx.ellipse(cx+wx+2,cy+bd+2,wr,wr*0.6,0,0,Math.PI*2);
-    ctx.fillStyle='rgba(0,0,0,0.2)'; ctx.fill();
-    // Wheel
-    ctx.beginPath(); ctx.arc(cx+wx,cy+bd,wr,0,Math.PI*2);
-    ctx.fillStyle=isEnemy?'#3a0000':'#0a1a30'; ctx.fill();
-    ctx.strokeStyle=isEnemy?'#cc4444':'#4488cc'; ctx.lineWidth=1.5; ctx.stroke();
-    // Spokes
-    for(let a=0;a<3;a++){
-      const ang=a*Math.PI/3;
-      ctx.beginPath();
-      ctx.moveTo(cx+wx+Math.cos(ang)*wr*0.8,cy+bd+Math.sin(ang)*wr*0.8);
-      ctx.lineTo(cx+wx-Math.cos(ang)*wr*0.8,cy+bd-Math.sin(ang)*wr*0.8);
-      ctx.strokeStyle=isEnemy?'#884444':'#448888'; ctx.lineWidth=1; ctx.stroke();
-    }
+  // Dirt texture dots on top face
+  const dotColor = dark ? (isMy?'#6a4a0a':'#5a2208') : (isMy?'#8a5c1a':'#6a2c0a');
+  const dots = dark ? [[0.2,0.1],[-.3,0.3],[0.1,-.2]] : [[-.2,0.2],[0.3,0.0],[-.1,-.3]];
+  dots.forEach(([dx, dz]) => {
+    const dot = {x: sx + dx*hw, y: sy + dz*hh + dx*hh*0.3};
+    ctx.beginPath();
+    ctx.arc(dot.x, dot.y, Math.max(1, TW*0.04), 0, Math.PI*2);
+    ctx.fillStyle = dotColor;
+    ctx.fill();
   });
 
-  // Barrel (2.5D: angled up slightly)
-  const barW=s*0.22, barH=s*1.0;
-  const barX=cx-barW/2, barY=by-bd-barH;
-  // Barrel shadow side
-  ctx.fillStyle=isEnemy?'#3a0808':'#0a1828';
-  ctx.fillRect(barX+barW*0.7,barY,barW*0.3,barH*0.85);
-  // Barrel main
-  ctx.fillStyle=isEnemy?'#aa2222':'#2255aa';
-  ctx.fillRect(barX,barY,barW*0.75,barH*0.85);
-  // Barrel muzzle
-  ctx.fillStyle=isEnemy?'#cc3333':'#3366bb';
-  ctx.fillRect(barX-barW*0.15,barY,barW*1.1,barH*0.12);
+  // Left face
+  ctx.beginPath();
+  ctx.moveTo(sx - hw, sy);
+  ctx.lineTo(sx,      sy + hh);
+  ctx.lineTo(sx,      sy + hh + depth);
+  ctx.lineTo(sx - hw, sy + depth);
+  ctx.closePath();
+  ctx.fillStyle = leftColor;
+  ctx.fill();
 
-  // Pulse glow
-  const t=Date.now()*0.003;
-  const alpha=0.25+Math.sin(t*2)*0.12;
-  ctx.beginPath(); ctx.arc(cx,cy,s+4,0,Math.PI*2);
-  ctx.strokeStyle=isEnemy?`rgba(220,60,60,${alpha})`:`rgba(60,120,220,${alpha})`;
-  ctx.lineWidth=2; ctx.stroke();
+  // Right face
+  ctx.beginPath();
+  ctx.moveTo(sx,      sy + hh);
+  ctx.lineTo(sx + hw, sy);
+  ctx.lineTo(sx + hw, sy + depth);
+  ctx.lineTo(sx,      sy + hh + depth);
+  ctx.closePath();
+  ctx.fillStyle = rightColor;
+  ctx.fill();
+
+  // Outline
+  ctx.strokeStyle = isMy ? 'rgba(60,30,0,0.35)' : 'rgba(60,10,0,0.35)';
+  ctx.lineWidth = 0.6;
+  ctx.beginPath();
+  ctx.moveTo(sx,      sy - hh);
+  ctx.lineTo(sx + hw, sy);
+  ctx.lineTo(sx,      sy + hh);
+  ctx.lineTo(sx - hw, sy);
+  ctx.closePath();
+  ctx.stroke();
 }
 
-function drawDestroyed(top, gx, gz){
-  const cx=OX+gx*CELL+CELL/2;
-  const cy=top+gz*CELL+CELL*0.65;
-  const s=CELL*0.35;
-  // Charred remains
-  ctx.beginPath(); ctx.ellipse(cx,cy,s,s*0.5,0,0,Math.PI*2);
-  ctx.fillStyle='#1a0a00'; ctx.fill();
-  // Fire
-  const t=Date.now()*0.005;
-  for(let i=0;i<4;i++){
-    const fx=cx+(Math.sin(t*1.2+i*1.5)*s*0.35);
-    const fy=cy-(Math.abs(Math.sin(t+i))*s*0.6)-s*0.1;
-    const fr=s*(0.15+Math.sin(t*1.8+i)*0.08);
-    const grad=ctx.createRadialGradient(fx,fy,0,fx,fy,fr*2);
-    grad.addColorStop(0,'rgba(255,220,50,0.9)');
+function drawIsoHighlight(origin, gx, gz, fillColor, strokeColor) {
+  const p = toScreen(origin, gx, gz);
+  const hw = TW / 2, hh = TH / 2;
+  ctx.beginPath();
+  ctx.moveTo(p.x,      p.y - hh);
+  ctx.lineTo(p.x + hw, p.y);
+  ctx.lineTo(p.x,      p.y + hh);
+  ctx.lineTo(p.x - hw, p.y);
+  ctx.closePath();
+  ctx.fillStyle = fillColor;
+  ctx.fill();
+  ctx.strokeStyle = strokeColor;
+  ctx.lineWidth = 1.5;
+  ctx.stroke();
+}
+
+// ─── ISO CANNON (2.5D) ──────────────────────────────────────
+function drawIsoCannon(origin, gx, gz, isEnemy, selected) {
+  const p = toScreen(origin, gx, gz);
+  const cx = p.x;
+  const cy = p.y; // center of tile top face
+  const s = TW * 0.38; // scale
+
+  // Glow if selected
+  if (selected) {
+    ctx.beginPath();
+    ctx.ellipse(cx, cy + TH*0.1, s*1.4, s*0.5, 0, 0, Math.PI*2);
+    ctx.fillStyle = 'rgba(40,120,255,0.25)';
+    ctx.fill();
+  }
+
+  // Ground shadow
+  ctx.beginPath();
+  ctx.ellipse(cx, cy + TH*0.15, s*0.9, s*0.28, 0, 0, Math.PI*2);
+  ctx.fillStyle = 'rgba(0,0,0,0.22)';
+  ctx.fill();
+
+  // ── Wheels ──
+  const wheelR = s * 0.28;
+  const wheelY = cy + TH*0.05;
+  [-s*0.38, s*0.38].forEach(wx => {
+    // Wheel side (3D look: ellipse)
+    ctx.beginPath();
+    ctx.ellipse(cx+wx, wheelY, wheelR*0.35, wheelR, 0, 0, Math.PI*2);
+    ctx.fillStyle = isEnemy ? '#2a0000' : '#001828';
+    ctx.fill();
+    ctx.strokeStyle = isEnemy ? '#cc3333' : '#3366cc';
+    ctx.lineWidth = 1.5;
+    ctx.stroke();
+    // Spokes
+    for (let a=0; a<4; a++) {
+      const ang = a * Math.PI/4;
+      ctx.beginPath();
+      ctx.moveTo(cx+wx + Math.cos(ang)*wheelR*0.28, wheelY + Math.sin(ang)*wheelR*0.8);
+      ctx.lineTo(cx+wx - Math.cos(ang)*wheelR*0.28, wheelY - Math.sin(ang)*wheelR*0.8);
+      ctx.strokeStyle = isEnemy ? '#884444' : '#448888';
+      ctx.lineWidth = 0.8;
+      ctx.stroke();
+    }
+    // Hub
+    ctx.beginPath();
+    ctx.arc(cx+wx, wheelY, wheelR*0.12, 0, Math.PI*2);
+    ctx.fillStyle = isEnemy ? '#cc3333' : '#3366cc';
+    ctx.fill();
+  });
+
+  // ── Axle ──
+  ctx.beginPath();
+  ctx.moveTo(cx - s*0.38, wheelY);
+  ctx.lineTo(cx + s*0.38, wheelY);
+  ctx.strokeStyle = isEnemy ? '#551111' : '#112244';
+  ctx.lineWidth = Math.max(2, s*0.12);
+  ctx.stroke();
+
+  // ── Carriage body (iso box) ──
+  const bw = s * 0.9, bh = s * 0.42, bd = s * 0.32;
+  const bx = cx - bw/2, by = wheelY - bh - bd*0.2;
+
+  // Top face
+  ctx.beginPath();
+  ctx.moveTo(cx,      by - bd*0.4);
+  ctx.lineTo(cx+bw/2, by);
+  ctx.lineTo(cx,      by + bd*0.4);
+  ctx.lineTo(cx-bw/2, by);
+  ctx.closePath();
+  ctx.fillStyle = isEnemy ? '#8b2020' : '#1a4080';
+  ctx.fill();
+
+  // Front face (toward viewer)
+  ctx.beginPath();
+  ctx.moveTo(cx-bw/2, by);
+  ctx.lineTo(cx,      by + bd*0.4);
+  ctx.lineTo(cx,      by + bh + bd*0.4);
+  ctx.lineTo(cx-bw/2, by + bh);
+  ctx.closePath();
+  ctx.fillStyle = isEnemy ? '#5a1010' : '#102860';
+  ctx.fill();
+
+  // Right face
+  ctx.beginPath();
+  ctx.moveTo(cx,      by + bd*0.4);
+  ctx.lineTo(cx+bw/2, by);
+  ctx.lineTo(cx+bw/2, by + bh);
+  ctx.lineTo(cx,      by + bh + bd*0.4);
+  ctx.closePath();
+  ctx.fillStyle = isEnemy ? '#3a0808' : '#0a1a40';
+  ctx.fill();
+
+  // ── Barrel (iso: angled in 2.5D) ──
+  const barLen = s * 0.95;
+  const barW   = s * 0.14;
+  // Barrel goes "up and left" in iso perspective
+  const bEndX = cx - barLen * 0.55;
+  const bEndY = by - barLen * 0.75;
+
+  // Barrel shadow
+  ctx.beginPath();
+  ctx.moveTo(cx + barW*0.3, by - barW*0.3);
+  ctx.lineTo(bEndX + barW*0.3, bEndY + barW*0.3);
+  ctx.strokeStyle = isEnemy ? '#1a0000' : '#000a1a';
+  ctx.lineWidth = barW * 1.4;
+  ctx.lineCap = 'round';
+  ctx.stroke();
+
+  // Barrel main
+  ctx.beginPath();
+  ctx.moveTo(cx, by);
+  ctx.lineTo(bEndX, bEndY);
+  ctx.strokeStyle = isEnemy ? '#cc2222' : '#2255bb';
+  ctx.lineWidth = barW * 1.2;
+  ctx.lineCap = 'round';
+  ctx.stroke();
+
+  // Barrel highlight
+  ctx.beginPath();
+  ctx.moveTo(cx - barW*0.2, by - barW*0.4);
+  ctx.lineTo(bEndX - barW*0.2, bEndY - barW*0.4);
+  ctx.strokeStyle = isEnemy ? 'rgba(255,100,100,0.5)' : 'rgba(100,150,255,0.5)';
+  ctx.lineWidth = barW * 0.4;
+  ctx.stroke();
+
+  // Muzzle cap
+  ctx.beginPath();
+  ctx.arc(bEndX, bEndY, barW*0.85, 0, Math.PI*2);
+  ctx.fillStyle = isEnemy ? '#ff4444' : '#4477ff';
+  ctx.fill();
+
+  // Pulse ring
+  const alpha = 0.25 + Math.sin(Date.now()*0.003)*0.15;
+  ctx.beginPath();
+  ctx.ellipse(cx, cy, s*0.9, s*0.3, 0, 0, Math.PI*2);
+  ctx.strokeStyle = isEnemy ? `rgba(220,60,60,${alpha})` : `rgba(60,120,220,${alpha})`;
+  ctx.lineWidth = 1.5;
+  ctx.stroke();
+}
+
+function drawIsoDestroyed(origin, gx, gz) {
+  const p = toScreen(origin, gx, gz);
+  const cx = p.x, cy = p.y;
+  const s = TW * 0.3;
+
+  ctx.beginPath();
+  ctx.ellipse(cx, cy + TH*0.1, s*0.9, s*0.3, 0, 0, Math.PI*2);
+  ctx.fillStyle = '#1a0a00';
+  ctx.fill();
+
+  const t = Date.now() * 0.005;
+  for (let i=0; i<4; i++) {
+    const fx = cx + Math.sin(t*1.2+i*1.5)*s*0.3;
+    const fy = cy - Math.abs(Math.sin(t+i))*s*0.7 + TH*0.1;
+    const fr = s*(0.18+Math.sin(t*1.8+i)*0.07);
+    const grad = ctx.createRadialGradient(fx,fy,0,fx,fy,fr*2);
+    grad.addColorStop(0,'rgba(255,220,50,0.95)');
     grad.addColorStop(0.5,'rgba(255,80,0,0.7)');
-    grad.addColorStop(1,'rgba(100,0,0,0)');
+    grad.addColorStop(1,'rgba(80,0,0,0)');
     ctx.beginPath(); ctx.arc(fx,fy,fr*2,0,Math.PI*2);
     ctx.fillStyle=grad; ctx.fill();
   }
-  ctx.font=`${Math.round(CELL*0.38)}px serif`;
-  ctx.textAlign='center'; ctx.textBaseline='middle';
-  ctx.fillText('💥',cx,cy-s*0.5);
 }
 
-function drawParticles(){
-  particles.forEach(p=>{
-    if(p.type==='fire'){
-      const grad=ctx.createRadialGradient(p.x,p.y,0,p.x,p.y,p.r);
-      grad.addColorStop(0,`rgba(255,200,50,${p.life})`);
-      grad.addColorStop(0.5,`rgba(255,60,0,${p.life*0.8})`);
-      grad.addColorStop(1,`rgba(80,0,0,0)`);
+// ─── PARTICLES ──────────────────────────────────────────────
+function drawParticles() {
+  particles.forEach(p => {
+    ctx.globalAlpha = Math.max(0, p.life);
+    if (p.type === 'fire') {
+      const g = ctx.createRadialGradient(p.x,p.y,0,p.x,p.y,p.r);
+      g.addColorStop(0,'rgba(255,200,50,1)');
+      g.addColorStop(0.5,'rgba(255,60,0,0.8)');
+      g.addColorStop(1,'rgba(80,0,0,0)');
       ctx.beginPath(); ctx.arc(p.x,p.y,p.r,0,Math.PI*2);
-      ctx.fillStyle=grad; ctx.fill();
-    } else if(p.type==='smoke'){
+      ctx.fillStyle=g; ctx.fill();
+    } else if (p.type === 'smoke') {
       ctx.beginPath(); ctx.arc(p.x,p.y,p.r,0,Math.PI*2);
-      ctx.fillStyle=`rgba(80,60,40,${p.life*0.4})`; ctx.fill();
-    } else if(p.type==='dirt'){
-      ctx.beginPath(); ctx.arc(p.x,p.y,p.r,0,Math.PI*2);
-      ctx.fillStyle=`rgba(${p.cr},${p.cg},${p.cb},${p.life})`; ctx.fill();
+      ctx.fillStyle=`rgba(80,60,40,${p.life*0.35})`; ctx.fill();
     } else {
       ctx.beginPath(); ctx.arc(p.x,p.y,p.r,0,Math.PI*2);
       ctx.fillStyle=`rgba(${p.cr},${p.cg},${p.cb},${p.life})`; ctx.fill();
     }
   });
+  ctx.globalAlpha = 1;
 }
 
-// EXPLOSION: fire burst + smoke + debris
-function spawnExplosion(top,gx,gz){
-  const cx=OX+gx*CELL+CELL/2, cy=top+gz*CELL+CELL*0.65;
-  // Fire particles
-  for(let i=0;i<20;i++){
-    const a=Math.random()*Math.PI*2, sp=(3+Math.random()*6)*CELL/40;
-    particles.push({type:'fire',x:cx,y:cy,vx:Math.cos(a)*sp,vy:Math.sin(a)*sp-sp*0.5,r:CELL*(0.2+Math.random()*0.25),life:1,decay:0.022+Math.random()*0.015});
+function isoWorldPos(origin, gx, gz) {
+  const p = toScreen(origin, gx, gz);
+  return { x: p.x, y: p.y + TH*0.1 };
+}
+
+function spawnExplosion(origin, gx, gz) {
+  const pos = isoWorldPos(origin, gx, gz);
+  for (let i=0; i<22; i++) {
+    const a=Math.random()*Math.PI*2, sp=(2+Math.random()*5);
+    particles.push({type:'fire',x:pos.x,y:pos.y,vx:Math.cos(a)*sp,vy:Math.sin(a)*sp-sp*0.6,r:TW*(0.18+Math.random()*0.22),life:1,decay:0.02+Math.random()*0.015});
   }
-  // Smoke
-  for(let i=0;i<8;i++){
-    const a=Math.random()*Math.PI*2, sp=(1+Math.random()*2)*CELL/40;
-    particles.push({type:'smoke',x:cx,y:cy-CELL*0.2,vx:Math.cos(a)*sp*0.4,vy:-sp*0.8-Math.random()*2,r:CELL*(0.25+Math.random()*0.3),life:0.9,decay:0.012+Math.random()*0.01});
+  for (let i=0; i<8; i++) {
+    const a=Math.random()*Math.PI*2, sp=1+Math.random()*1.5;
+    particles.push({type:'smoke',x:pos.x,y:pos.y-TH*0.3,vx:Math.cos(a)*sp*0.3,vy:-sp,r:TW*(0.2+Math.random()*0.25),life:0.85,decay:0.01+Math.random()*0.008});
   }
-  // Debris chunks
-  for(let i=0;i<10;i++){
-    const a=Math.random()*Math.PI*2, sp=(4+Math.random()*5)*CELL/40;
-    particles.push({type:'debris',x:cx,y:cy,vx:Math.cos(a)*sp,vy:Math.sin(a)*sp-3,r:2+Math.random()*3,life:1,decay:0.028,cr:30,cg:20,cb:10});
+  for (let i=0; i<10; i++) {
+    const a=Math.random()*Math.PI*2, sp=3+Math.random()*4;
+    particles.push({type:'debris',x:pos.x,y:pos.y,vx:Math.cos(a)*sp,vy:Math.sin(a)*sp-3,r:2+Math.random()*3,life:1,decay:0.03,cr:30,cg:20,cb:10});
   }
 }
 
-// MISS: dirt clumps fly up
-function spawnMiss(top,gx,gz){
-  const cx=OX+gx*CELL+CELL/2, cy=top+gz*CELL+CELL*0.65;
-  for(let i=0;i<14;i++){
-    const a=-Math.PI/2+(-0.8+Math.random()*1.6); // mostly upward
-    const sp=(3+Math.random()*5)*CELL/40;
-    const brown=[
-      [139,100,35],[120,80,20],[160,120,50],[100,70,15],[150,110,40]
-    ][Math.floor(Math.random()*5)];
-    particles.push({
-      type:'dirt',
-      x:cx+(Math.random()-0.5)*CELL*0.5,
-      y:cy,
-      vx:Math.cos(a)*sp*(0.5+Math.random()),
-      vy:Math.sin(a)*sp,
-      r:3+Math.random()*5,
-      life:1, decay:0.025+Math.random()*0.02,
-      cr:brown[0],cg:brown[1],cb:brown[2]
-    });
+function spawnMiss(origin, gx, gz) {
+  const pos = isoWorldPos(origin, gx, gz);
+  const browns=[[139,100,35],[120,80,20],[160,120,50],[100,70,15],[150,110,40]];
+  for (let i=0; i<16; i++) {
+    const a=-Math.PI/2+(-1+Math.random()*2), sp=2+Math.random()*4;
+    const b=browns[Math.floor(Math.random()*browns.length)];
+    particles.push({type:'dirt',x:pos.x+(Math.random()-0.5)*TW*0.4,y:pos.y,vx:Math.cos(a)*sp*(0.5+Math.random()),vy:Math.sin(a)*sp,r:3+Math.random()*5,life:1,decay:0.024+Math.random()*0.018,cr:b[0],cg:b[1],cb:b[2]});
   }
-  // Small impact crater mark (fades)
-  particles.push({type:'dirt',x:cx,y:cy,vx:0,vy:0,r:CELL*0.3,life:0.6,decay:0.008,cr:80,cg:50,cb:10});
+  // Crater mark
+  particles.push({type:'dirt',x:pos.x,y:pos.y,vx:0,vy:0,r:TW*0.28,life:0.55,decay:0.007,cr:70,cg:45,cb:10});
 }
 
-function updateParticles(){
-  for(let i=particles.length-1;i>=0;i--){
+function updateParticles() {
+  for (let i=particles.length-1; i>=0; i--) {
     const p=particles[i];
-    if(p.vx!==undefined){
+    if (p.vx !== undefined) {
       p.x+=p.vx; p.y+=p.vy;
-      if(p.type==='dirt'||p.type==='debris') p.vy+=0.18; // gravity
-      if(p.type==='smoke'){ p.r+=0.3; p.vx*=0.96; p.vy*=0.96; }
-      if(p.type==='fire') p.r*=0.96;
+      if (p.type==='dirt'||p.type==='debris') p.vy+=0.15;
+      if (p.type==='smoke') { p.r+=0.25; p.vx*=0.95; p.vy*=0.95; }
+      if (p.type==='fire') p.r*=0.97;
     }
     p.life-=p.decay;
-    if(p.life<=0){particles.splice(i,1);}
+    if (p.life<=0) particles.splice(i,1);
   }
 }
 
-function calcMoveCells(idx){
+// ─── HIT TESTING ────────────────────────────────────────────
+// Find which tile was clicked using inverse iso transform
+function clickToGrid(origin, mx, my) {
+  const {gx, gz} = toGrid(origin, mx, my);
+  if (inBounds(gx, gz)) return {gx, gz};
+  return null;
+}
+
+// ─── MOVE CELLS ─────────────────────────────────────────────
+function calcMoveCells(idx) {
   const c=myCannons[idx]; const cells=[];
   for(let x=0;x<GRID;x++) for(let y=0;y<GRID;y++){
     const dist=Math.abs(x-c.x)+Math.abs(y-c.y);
@@ -521,40 +633,44 @@ function calcMoveCells(idx){
   return cells;
 }
 
-function gameLoop(){
+// ─── GAME LOOP ──────────────────────────────────────────────
+function gameLoop() {
   updateParticles(); draw();
-  animFrame=requestAnimationFrame(gameLoop);
+  animFrame = requestAnimationFrame(gameLoop);
 }
 
-canvas.addEventListener('click',e=>{
-  if(!myTurn||!mode) return;
+// ─── CLICK ──────────────────────────────────────────────────
+canvas.addEventListener('click', e => {
+  if (!myTurn || !mode) return;
   const rect=canvas.getBoundingClientRect();
   const scaleX=canvas.width/rect.width, scaleY=canvas.height/rect.height;
   const mx=(e.clientX-rect.left)*scaleX, my=(e.clientY-rect.top)*scaleY;
 
-  if(mode==='fire'){
-    if(my>=EN_TOP&&my<EN_TOP+GRID*CELL&&mx>=OX&&mx<OX+GRID*CELL){
-      const gx=Math.floor((mx-OX)/CELL), gz=Math.floor((my-EN_TOP)/CELL);
-      sendAction({type:'fire',x:gx,y:gz}); disableButtons(); hintEl.textContent='';
+  if (mode==='fire') {
+    const cell = clickToGrid(enOrigin, mx, my);
+    if (cell) {
+      sendAction({type:'fire', x:cell.gx, y:cell.gz});
+      disableButtons(); hintEl.textContent='';
     }
-  } else if(mode==='move'){
-    if(selectedCannonIdx===null){
-      for(let i=0;i<myCannons.length;i++){
-        if(!myAlive[i]) continue;
+  } else if (mode==='move') {
+    if (selectedCannonIdx===null) {
+      // Check if clicked on a cannon
+      for (let i=0; i<myCannons.length; i++) {
+        if (!myAlive[i]) continue;
         const c=myCannons[i];
-        const cx=OX+c.x*CELL+CELL/2, cy=MY_TOP+c.y*CELL+CELL*0.65;
-        const dx=mx-cx, dy=my-cy;
-        if(Math.sqrt(dx*dx+dy*dy)<CELL*0.6){
+        const p=toScreen(myOrigin, c.x, c.y);
+        const dx=mx-p.x, dy=my-p.y;
+        if (Math.sqrt(dx*dx+dy*dy)<TW*0.55) {
           selectedCannonIdx=i; moveCells=calcMoveCells(i);
           hintEl.textContent='Select destination (up to 4 cells)'; break;
         }
       }
     } else {
-      if(my>=MY_TOP&&my<MY_TOP+GRID*CELL&&mx>=OX&&mx<OX+GRID*CELL){
-        const gx=Math.floor((mx-OX)/CELL), gz=Math.floor((my-MY_TOP)/CELL);
-        const valid=moveCells.find(mc=>mc.x===gx&&mc.y===gz);
-        if(valid){
-          sendAction({type:'move',cannonIndex:selectedCannonIdx,x:gx,y:gz});
+      const cell = clickToGrid(myOrigin, mx, my);
+      if (cell) {
+        const valid = moveCells.find(mc=>mc.x===cell.gx&&mc.y===cell.gz);
+        if (valid) {
+          sendAction({type:'move', cannonIndex:selectedCannonIdx, x:cell.gx, y:cell.gz});
           disableButtons(); selectedCannonIdx=null; moveCells=[]; hintEl.textContent='';
         } else { hintEl.textContent='Invalid — choose a highlighted cell'; }
       }
@@ -562,7 +678,8 @@ canvas.addEventListener('click',e=>{
   }
 });
 
-function startTimer(s){
+// ─── TIMER ──────────────────────────────────────────────────
+function startTimer(s) {
   clearInterval(timerInterval); turnDuration=s; turnEndTime=Date.now()+s*1000;
   timerInterval=setInterval(()=>{
     const left=(turnEndTime-Date.now())/1000, pct=Math.max(0,left/turnDuration)*100;
@@ -572,14 +689,16 @@ function startTimer(s){
   },80);
 }
 
-function selectMode(m){
+function selectMode(m) {
   if(!myTurn)return; mode=m; selectedCannonIdx=null; moveCells=[];
-  if(mode==='fire'){btnFire.classList.add('active');btnMove.classList.remove('active');hintEl.textContent='Select target cell in enemy territory';}
+  if(mode==='fire'){btnFire.classList.add('active');btnMove.classList.remove('active');hintEl.textContent='Select target in enemy territory';}
   else{btnMove.classList.add('active');btnFire.classList.remove('active');hintEl.textContent='Select your cannon to move';}
 }
 
+// ─── WEBSOCKET ──────────────────────────────────────────────
 const SERVER_URL=(()=>{const p=location.protocol==='https:'?'wss:':'ws:';return `${p}//${location.host}`;})();
-function findGame(){
+
+function findGame() {
   showScreen('screen-waiting');
   ws=new WebSocket(SERVER_URL);
   ws.onopen=()=>ws.send(JSON.stringify({type:'find_game'}));
@@ -588,7 +707,7 @@ function findGame(){
 }
 function sendAction(a){if(ws&&ws.readyState===1)ws.send(JSON.stringify({type:'action',action:a}));}
 
-function handleMessage(msg){
+function handleMessage(msg) {
   if(msg.type==='game_start'){
     playerIndex=msg.playerIndex; myCannons=msg.myCannons; enemyCannons=msg.enemyCannons;
     myAlive=[true,true]; enemyAlive=[true,true]; enemyRevealed=[false,false];
@@ -605,11 +724,11 @@ function handleMessage(msg){
     const action=msg.action; myCannons=msg.myCannons; enemyAlive=msg.enemyAlive;
     if(action&&action.type==='fire'){
       if(!myTurn){
-        if(msg.hit){spawnExplosion(MY_TOP,action.x,action.y);myAlive[msg.cannonIndex]=false;}
-        else spawnMiss(MY_TOP,action.x,action.y);
+        if(msg.hit){spawnExplosion(myOrigin,action.x,action.y);myAlive[msg.cannonIndex]=false;}
+        else spawnMiss(myOrigin,action.x,action.y);
       } else {
-        if(msg.hit){spawnExplosion(EN_TOP,action.x,action.y);enemyAlive[msg.cannonIndex]=false;enemyRevealed[msg.cannonIndex]=true;}
-        else spawnMiss(EN_TOP,action.x,action.y);
+        if(msg.hit){spawnExplosion(enOrigin,action.x,action.y);enemyAlive[msg.cannonIndex]=false;enemyRevealed[msg.cannonIndex]=true;}
+        else spawnMiss(enOrigin,action.x,action.y);
       }
     }
     myTurn=false;
@@ -625,11 +744,7 @@ function handleMessage(msg){
   if(msg.type==='opponent_left'){clearInterval(timerInterval);fieldLabels.style.display='none';showScreen('screen-left');}
 }
 
-function showScreen(id){
-  ['screen-menu','screen-waiting','screen-gameover','screen-left'].forEach(s=>{
-    document.getElementById(s).style.display=s===id?'flex':'none';
-  });
-}
+function showScreen(id){['screen-menu','screen-waiting','screen-gameover','screen-left'].forEach(s=>{document.getElementById(s).style.display=s===id?'flex':'none';});}
 function setStatus(t){statusEl.textContent=t;}
 function disableButtons(){btnFire.disabled=true;btnMove.disabled=true;btnFire.classList.remove('active');btnMove.classList.remove('active');}
 function resetGame(){
@@ -642,7 +757,7 @@ function resetGame(){
   ctx.clearRect(0,0,canvas.width,canvas.height);
   showScreen('screen-menu');
 }
-window.addEventListener('resize',()=>{if(myCannons.length){layout();}});
+window.addEventListener('resize',()=>{if(myCannons.length)layout();});
 </script>
 </body>
 </html>
