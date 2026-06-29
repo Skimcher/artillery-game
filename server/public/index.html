@@ -199,14 +199,14 @@ let timerInterval=null, turnDuration=TURN_TIME, turnEndTime=0;
 function layout() {
   const wrap = document.getElementById('canvas-wrap');
   const W = wrap.clientWidth;
-  const H = Math.floor(window.innerHeight * 0.55);
+  const H = Math.floor(window.innerHeight * 0.72);
 
   // Fit two isometric grids + gap vertically
   // Each grid: height = (GRID-1+GRID-1)*TH/2 + TH = (2*GRID-1)*TH
   // We need 2 grids + gap (2*TH) to fit in H
   // total height = 2*(2*GRID-1)*TH + 2*TH = (4*GRID)*TH
   // TH = H / (4*GRID)
-  TH = Math.max(12, Math.floor(H / (GRID * 4.5)));
+  TH = Math.max(14, Math.floor(H / (GRID * 3.8)));
   TW = TH * 2;
 
   // Canvas width: iso grid width = (GRID+GRID-1)*TW/2 ... actually max x span = (GRID-1)*TW
@@ -225,7 +225,7 @@ function layout() {
   // Enemy field: top portion
   // top of field = enOrigin.y, bottom = enOrigin.y + (2*GRID-2)*TH/2
   const fieldH = (GRID - 1) * TH;
-  const gapH = TH * 2;
+  const gapH = TH * 1.2;
 
   enOrigin = { x: ox, y: TH };
   myOrigin = { x: ox, y: enOrigin.y + fieldH + gapH };
