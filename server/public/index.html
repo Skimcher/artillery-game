@@ -24,41 +24,31 @@ body {
   background:#c8a96e;
   border-bottom:3px solid #8b6914;
   flex-shrink:0;
-  box-shadow:0 2px 8px rgba(0,0,0,0.3);
+  box-shadow:0 2px 6px rgba(0,0,0,0.25);
 }
 #status { font-size:12px; letter-spacing:0.06em; color:#3a1a00; text-transform:uppercase; font-weight:bold; }
 #timer-bar { width:90px; height:7px; background:#8b6914; border-radius:4px; overflow:hidden; border:1px solid #5a4000; }
 #timer-fill { height:100%; width:100%; background:#e8a020; border-radius:4px; transition:background 0.3s; }
 
-#field-labels {
-  display:none;
-  justify-content:space-around;
-  padding:3px 0;
-  background:#d4b483;
-  border-bottom:2px solid #8b6914;
-  flex-shrink:0;
-}
-.field-label { font-size:10px; letter-spacing:0.07em; text-transform:uppercase; padding:2px 10px; border-radius:3px; font-weight:bold; }
-.field-label.enemy { color:#8b0000; border:1px solid #8b0000; background:rgba(139,0,0,0.1); }
-.field-label.my { color:#00408b; border:1px solid #00408b; background:rgba(0,64,139,0.1); }
-
 #canvas-wrap {
   flex:1;
   display:flex;
-  align-items:center;
+  align-items:stretch;
   justify-content:center;
   overflow:hidden;
   min-height:0;
-  max-height:70vh;
   background:#d4c9a8;
+  position:relative;
 }
-canvas { display:block; }
+canvas { display:block; width:100% !important; height:100% !important; }
 
-#hint { text-align:center; font-size:10px; color:#6b4c2a; padding:2px 0; letter-spacing:0.03em; flex-shrink:0; background:#d4b483; min-height:18px; border-top:1px solid #b8915a; }
-
+#hint {
+  text-align:center; font-size:10px; color:#6b4c2a;
+  padding:2px 0; letter-spacing:0.03em; flex-shrink:0;
+  background:#d4b483; min-height:18px; border-top:1px solid #b8915a;
+}
 #ui-bottom {
-  display:flex;
-  gap:8px;
+  display:flex; gap:8px;
   padding:8px 12px 12px;
   background:#c8a96e;
   border-top:3px solid #8b6914;
@@ -72,9 +62,9 @@ canvas { display:block; }
   cursor:pointer; transition:all 0.15s; white-space:nowrap;
 }
 #btn-fire { border-color:#8b0000; color:#8b0000; background:#f5e8d8; }
-#btn-fire.active { background:#8b0000; color:#fff; box-shadow:0 0 12px rgba(139,0,0,0.5); }
+#btn-fire.active { background:#8b0000; color:#fff; box-shadow:0 0 10px rgba(139,0,0,0.5); }
 #btn-move { border-color:#00408b; color:#00408b; background:#f5e8d8; }
-#btn-move.active { background:#00408b; color:#fff; box-shadow:0 0 12px rgba(0,64,139,0.4); }
+#btn-move.active { background:#00408b; color:#fff; box-shadow:0 0 10px rgba(0,64,139,0.4); }
 .btn:disabled { opacity:0.35; cursor:default; }
 
 .overlay {
@@ -106,9 +96,7 @@ canvas { display:block; }
   <button class="overlay-btn" onclick="findGame()">Find Opponent</button>
 </div>
 <div class="overlay" id="screen-waiting" style="display:none">
-  <div class="big">⏳</div>
-  <h1>Searching...</h1>
-  <p>Waiting for an opponent</p>
+  <div class="big">⏳</div><h1>Searching...</h1><p>Waiting for an opponent</p>
 </div>
 <div class="overlay" id="screen-gameover" style="display:none">
   <div class="big" id="gameover-icon">🏆</div>
@@ -117,18 +105,13 @@ canvas { display:block; }
   <button class="overlay-btn" onclick="resetGame()">Play Again</button>
 </div>
 <div class="overlay" id="screen-left" style="display:none">
-  <div class="big">🚪</div>
-  <h1>Opponent Left</h1>
+  <div class="big">🚪</div><h1>Opponent Left</h1>
   <button class="overlay-btn" onclick="resetGame()">Back to Menu</button>
 </div>
 
 <div id="ui-top">
   <div id="status">Waiting...</div>
   <div id="timer-bar"><div id="timer-fill"></div></div>
-</div>
-<div id="field-labels">
-  <div class="field-label enemy">◀ Enemy Territory</div>
-  <div class="field-label my">Your Territory ▶</div>
 </div>
 <div id="canvas-wrap"><canvas id="gc"></canvas></div>
 <div id="hint"></div>
@@ -138,423 +121,348 @@ canvas { display:block; }
 </div>
 
 <script>
-// ─── ISO MATH ───────────────────────────────────────────────
-// Standard 2:1 isometric: tile width = TW, height = TH = TW/2
-// grid (gx,gz) → screen (sx,sy):
-//   sx = origin.x + (gx - gz) * TW/2
-//   sy = origin.y + (gx + gz) * TH/2
+// ══════════════════════════════════════════════
+//  ISOMETRIC PERSPECTIVE ARTILLERY
+//  Enemy field: top, smaller (far)
+//  My field:    bottom, larger (near)
+// ══════════════════════════════════════════════
 
 const GRID = 6;
 const MOVE_RANGE = 4;
 const TURN_TIME = 9;
 
-let TW = 60; // tile width (pixels), set in layout()
-let TH = 30; // tile height = TW/2
+// Two different tile sizes for perspective effect
+let TW_MY = 60;   // my field tile width (larger = closer)
+let TH_MY = 30;
+let TW_EN = 38;   // enemy field tile width (smaller = farther)
+let TH_EN = 19;
 
-// Origins for each field (top-left corner in iso space)
-let myOrigin   = {x:0, y:0};
-let enOrigin   = {x:0, y:0};
+let myOrigin = {x:0, y:0};
+let enOrigin = {x:0, y:0};
 
-// Convert grid coords → screen coords for a field
-function toScreen(origin, gx, gz) {
+// Iso grid → screen
+function toScreen(origin, TW, TH, gx, gz) {
   return {
     x: origin.x + (gx - gz) * TW / 2,
     y: origin.y + (gx + gz) * TH / 2
   };
 }
-
-// Convert screen click → grid coords (inverse iso)
-function toGrid(origin, sx, sy) {
-  const rx = sx - origin.x;
-  const ry = sy - origin.y;
-  const gx = (rx / (TW / 2) + ry / (TH / 2)) / 2;
-  const gz = (ry / (TH / 2) - rx / (TW / 2)) / 2;
-  return { gx: Math.floor(gx), gz: Math.floor(gz) };
+// Screen → iso grid
+function toGrid(origin, TW, TH, sx, sy) {
+  const rx = sx - origin.x, ry = sy - origin.y;
+  return {
+    gx: Math.floor((rx/(TW/2) + ry/(TH/2)) / 2),
+    gz: Math.floor((ry/(TH/2) - rx/(TW/2)) / 2)
+  };
 }
+function inBounds(gx, gz) { return gx>=0&&gx<GRID&&gz>=0&&gz<GRID; }
 
-// Check if grid coords are in bounds
-function inBounds(gx, gz) {
-  return gx >= 0 && gx < GRID && gz >= 0 && gz < GRID;
-}
-
-// ─── STATE ──────────────────────────────────────────────────
+// ── State ──────────────────────────────────────
 let ws=null, playerIndex=null, myTurn=false, mode=null, selectedCannonIdx=null;
 let myCannons=[], enemyCannons=[];
 let myAlive=[true,true], enemyAlive=[true,true];
 let enemyRevealed=[false,false];
-let particles=[];
-let animFrame=null;
-let moveCells=[];
+let particles=[], animFrame=null, moveCells=[];
 
-const statusEl   = document.getElementById('status');
-const timerFill  = document.getElementById('timer-fill');
-const hintEl     = document.getElementById('hint');
-const btnFire    = document.getElementById('btn-fire');
-const btnMove    = document.getElementById('btn-move');
-const fieldLabels= document.getElementById('field-labels');
-const canvas     = document.getElementById('gc');
-const ctx        = canvas.getContext('2d');
+const statusEl=document.getElementById('status');
+const timerFill=document.getElementById('timer-fill');
+const hintEl=document.getElementById('hint');
+const btnFire=document.getElementById('btn-fire');
+const btnMove=document.getElementById('btn-move');
+const canvas=document.getElementById('gc');
+const ctx=canvas.getContext('2d');
 let timerInterval=null, turnDuration=TURN_TIME, turnEndTime=0;
 
-// ─── LAYOUT ─────────────────────────────────────────────────
+// ── Layout ─────────────────────────────────────
 function layout() {
   const wrap = document.getElementById('canvas-wrap');
   const W = wrap.clientWidth;
-  const H = Math.floor(window.innerHeight * 0.70);
+  const H = wrap.clientHeight || Math.floor(window.innerHeight * 0.65);
 
-  // Side-by-side: my field LEFT, enemy field RIGHT
-  // Each iso field x-span = (GRID-1)*TW, y-span = (GRID-1)*TH
-  // Two fields + gap must fit in W
-  TW = Math.max(20, Math.floor(W / (GRID * 2.4)));
-  TH = Math.floor(TW / 2);
+  canvas.width  = W;
+  canvas.height = H;
 
-  const isoFieldH = (GRID - 1) * TH + Math.round(TH * 1.2); // include tile depth
-  const ch = Math.min(H, isoFieldH + TH * 2);
-  canvas.width = W;
-  canvas.height = ch;
+  // My field (near, bottom): tile size fits ~55% of width
+  TW_MY = Math.max(22, Math.floor(W / (GRID * 1.15)));
+  TH_MY = Math.floor(TW_MY / 2);
 
-  // Left field (mine): origin at horizontal center of left half
-  // Right field (enemy): origin at horizontal center of right half
-  myOrigin = { x: Math.floor(W * 0.27), y: TH };
-  enOrigin = { x: Math.floor(W * 0.73), y: TH };
+  // Enemy field (far, top): 60% the size of mine
+  TW_EN = Math.floor(TW_MY * 0.60);
+  TH_EN = Math.floor(TW_EN / 2);
+
+  // Field heights in screen space
+  const myFieldH  = (GRID-1) * TH_MY + Math.round(TH_MY * 0.5);
+  const enFieldH  = (GRID-1) * TH_EN + Math.round(TH_EN * 0.5);
+  const gapH      = Math.round(H * 0.05);
+
+  // Enemy field sits at top, my field at bottom
+  // Center both horizontally
+  const enW = (GRID-1) * TW_EN;
+  const myW = (GRID-1) * TW_MY;
+
+  enOrigin = {
+    x: Math.floor(W / 2),
+    y: Math.round(H * 0.04) + Math.round(TH_EN/2)
+  };
+  myOrigin = {
+    x: Math.floor(W / 2),
+    y: H - myFieldH - Math.round(TH_MY * 0.3)
+  };
 }
 
-// ─── DRAW ───────────────────────────────────────────────────
+// ── Draw ───────────────────────────────────────
 function draw() {
-  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  ctx.clearRect(0,0,canvas.width,canvas.height);
   if (!myCannons.length) return;
 
-  // Draw fields back-to-front (painter's algorithm: low gz first)
-  drawIsoField(enOrigin, false);
-  drawIsoField(myOrigin, true);
+  // Background gradient (sky → ground)
+  const bg = ctx.createLinearGradient(0,0,0,canvas.height);
+  bg.addColorStop(0,'#c8bfa0');
+  bg.addColorStop(1,'#e8dfc8');
+  ctx.fillStyle = bg;
+  ctx.fillRect(0,0,canvas.width,canvas.height);
 
-  // Vertical divider between fields
-  const midX = canvas.width / 2;
+  // Enemy field label
+  drawFieldLabel(enOrigin, TW_EN, TH_EN, 'ENEMY TERRITORY', '#8b0000');
+
+  drawIsoField(enOrigin, TW_EN, TH_EN, false);
+
+  // Dividing line / horizon
+  const horizY = enOrigin.y + (GRID-1)*TH_EN + TH_EN * 1.2;
   ctx.save();
-  ctx.strokeStyle = '#7a5a20';
-  ctx.lineWidth = 2;
-  ctx.setLineDash([6, 4]);
+  ctx.strokeStyle = '#8b6914';
+  ctx.lineWidth = 1.5;
+  ctx.setLineDash([8,5]);
   ctx.beginPath();
-  ctx.moveTo(midX, 0);
-  ctx.lineTo(midX, canvas.height);
+  ctx.moveTo(canvas.width*0.05, horizY);
+  ctx.lineTo(canvas.width*0.95, horizY);
   ctx.stroke();
   ctx.setLineDash([]);
-  // Labels
-  ctx.font = `bold ${Math.max(9, TH*0.5)}px Georgia`;
+  ctx.font = `bold ${Math.max(9, TH_EN*0.6)}px Georgia`;
   ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-  ctx.fillStyle = '#00408b';
-  ctx.fillText('YOUR SIDE', midX * 0.5, canvas.height - TH * 0.8);
-  ctx.fillStyle = '#8b0000';
-  ctx.fillText('ENEMY SIDE', midX * 1.5, canvas.height - TH * 0.8);
+  ctx.fillStyle = '#7a5a20';
+  ctx.fillText('— FRONT LINE —', canvas.width/2, horizY + TH_EN*0.5);
   ctx.restore();
 
+  drawIsoField(myOrigin, TW_MY, TH_MY, true);
+
+  // My field label
+  drawFieldLabel(myOrigin, TW_MY, TH_MY, 'YOUR TERRITORY', '#00408b');
+
   // Move highlights
-  if (mode === 'move' && selectedCannonIdx !== null) {
-    moveCells.forEach(({x, y}) => drawIsoHighlight(myOrigin, x, y, 'rgba(40,120,255,0.35)', '#4488ff'));
+  if (mode==='move' && selectedCannonIdx!==null) {
+    moveCells.forEach(({x,y}) => drawIsoHighlight(myOrigin,TW_MY,TH_MY,x,y,'rgba(40,120,255,0.3)','#4488ff'));
   }
-  // Fire highlights
-  if (mode === 'fire' && myTurn) {
-    for (let x=0; x<GRID; x++) for (let z=0; z<GRID; z++)
-      drawIsoHighlight(enOrigin, x, z, 'rgba(200,30,30,0.15)', 'rgba(200,30,30,0.4)');
+  if (mode==='fire' && myTurn) {
+    for(let x=0;x<GRID;x++) for(let z=0;z<GRID;z++)
+      drawIsoHighlight(enOrigin,TW_EN,TH_EN,x,z,'rgba(200,30,30,0.15)','rgba(200,30,30,0.5)');
   }
 
-  // Draw cannons (back rows first for painter's order)
-  for (let gz = 0; gz < GRID; gz++) {
-    for (let gx = 0; gx < GRID; gx++) {
-      // My cannons
-      myCannons.forEach((c, i) => {
-        if (c.x === gx && c.y === gz) {
-          if (myAlive[i]) drawIsoCannon(myOrigin, gx, gz, false, i === selectedCannonIdx);
-          else drawIsoDestroyed(myOrigin, gx, gz);
-        }
-      });
-      // Enemy cannons — hidden unless revealed
-      enemyCannons.forEach((c, i) => {
-        if (c.x === gx && c.y === gz && enemyRevealed[i]) {
-          if (enemyAlive[i]) drawIsoCannon(enOrigin, gx, gz, true, false);
-          else drawIsoDestroyed(enOrigin, gx, gz);
-        }
-      });
-    }
+  // Cannons — painter's order (back rows first)
+  for(let gz=0;gz<GRID;gz++) for(let gx=0;gx<GRID;gx++) {
+    myCannons.forEach((c,i)=>{
+      if(c.x===gx&&c.y===gz){
+        if(myAlive[i]) drawIsoCannon(myOrigin,TW_MY,TH_MY,gx,gz,false,i===selectedCannonIdx);
+        else drawIsoDestroyed(myOrigin,TW_MY,TH_MY,gx,gz);
+      }
+    });
+    enemyCannons.forEach((c,i)=>{
+      if(c.x===gx&&c.y===gz&&enemyRevealed[i]){
+        if(enemyAlive[i]) drawIsoCannon(enOrigin,TW_EN,TH_EN,gx,gz,true,false);
+        else drawIsoDestroyed(enOrigin,TW_EN,TH_EN,gx,gz);
+      }
+    });
   }
 
   drawParticles();
 }
 
-function drawIsoField(origin, isMy) {
-  // Draw tiles back-to-front: gz=0 first (farthest), gz=GRID-1 last (nearest)
-  for (let gz = 0; gz < GRID; gz++) {
-    for (let gx = 0; gx < GRID; gx++) {
-      const p = toScreen(origin, gx, gz);
-      drawIsoTile(p.x, p.y, gx, gz, isMy);
-    }
+function drawFieldLabel(origin, TW, TH, text, color) {
+  const topY = origin.y - (GRID-1)*TH/2 - TH*1.2;
+  ctx.save();
+  ctx.font = `bold ${Math.max(9,TH*0.65)}px Georgia`;
+  ctx.textAlign='center'; ctx.textBaseline='middle';
+  ctx.fillStyle=color;
+  ctx.fillText(text, origin.x, Math.max(12, topY));
+  ctx.restore();
+}
+
+function drawIsoField(origin, TW, TH, isMy) {
+  const depth = Math.max(2, Math.round(TH*0.45));
+  for(let gz=0;gz<GRID;gz++) for(let gx=0;gx<GRID;gx++) {
+    const p = toScreen(origin,TW,TH,gx,gz);
+    drawIsoTile(p.x,p.y,TW,TH,depth,gx,gz,isMy);
   }
 }
 
-function drawIsoTile(sx, sy, gx, gz, isMy) {
-  const dark = (gx + gz) % 2 === 0;
+function drawIsoTile(sx, sy, TW, TH, depth, gx, gz, isMy) {
+  const dark = (gx+gz)%2===0;
+  const hw=TW/2, hh=TH/2;
 
-  // Top face colors — earthy browns
-  let topColor, leftColor, rightColor;
-  if (isMy) {
-    topColor   = dark ? '#8b6520' : '#a87c35';
-    leftColor  = dark ? '#6a4a10' : '#8a5e22';
-    rightColor = dark ? '#7a5518' : '#9a6c2a';
+  let top, left, right;
+  if(isMy){
+    top  = dark?'#8b6520':'#a87c35';
+    left = dark?'#6a4a10':'#8a5e22';
+    right= dark?'#7a5518':'#9a6c2a';
   } else {
-    topColor   = dark ? '#7a3a15' : '#954520';
-    leftColor  = dark ? '#5a2a08' : '#743010';
-    rightColor = dark ? '#6a3010' : '#843818';
+    top  = dark?'#7a3a15':'#954520';
+    left = dark?'#5a2a08':'#743010';
+    right= dark?'#6a3010':'#843818';
   }
 
-  const hw = TW / 2;
-  const hh = TH / 2;
-  const depth = Math.max(3, TH * 0.38); // side depth
-
-  // Top face (diamond)
+  // Top face
   ctx.beginPath();
-  ctx.moveTo(sx,      sy - hh);  // top
-  ctx.lineTo(sx + hw, sy);       // right
-  ctx.lineTo(sx,      sy + hh);  // bottom
-  ctx.lineTo(sx - hw, sy);       // left
+  ctx.moveTo(sx,    sy-hh);
+  ctx.lineTo(sx+hw, sy);
+  ctx.lineTo(sx,    sy+hh);
+  ctx.lineTo(sx-hw, sy);
   ctx.closePath();
-  ctx.fillStyle = topColor;
-  ctx.fill();
+  ctx.fillStyle=top; ctx.fill();
 
-  // Dirt texture dots on top face
-  const dotColor = dark ? (isMy?'#6a4a0a':'#5a2208') : (isMy?'#8a5c1a':'#6a2c0a');
-  const dots = dark ? [[0.2,0.1],[-.3,0.3],[0.1,-.2]] : [[-.2,0.2],[0.3,0.0],[-.1,-.3]];
-  dots.forEach(([dx, dz]) => {
-    const dot = {x: sx + dx*hw, y: sy + dz*hh + dx*hh*0.3};
+  // Dirt dots
+  const dotColor=dark?(isMy?'#6a4a0a':'#5a2208'):(isMy?'#8a5c1a':'#6a2c0a');
+  const dots=dark?[[.2,.1],[-.3,.3],[.1,-.2]]:[[-.2,.2],[.3,0],[-.1,-.3]];
+  dots.forEach(([dx,dz])=>{
     ctx.beginPath();
-    ctx.arc(dot.x, dot.y, Math.max(1, TW*0.04), 0, Math.PI*2);
-    ctx.fillStyle = dotColor;
-    ctx.fill();
+    ctx.arc(sx+dx*hw, sy+dz*hh+dx*hh*0.3, Math.max(1,TW*0.04),0,Math.PI*2);
+    ctx.fillStyle=dotColor; ctx.fill();
   });
 
   // Left face
   ctx.beginPath();
-  ctx.moveTo(sx - hw, sy);
-  ctx.lineTo(sx,      sy + hh);
-  ctx.lineTo(sx,      sy + hh + depth);
-  ctx.lineTo(sx - hw, sy + depth);
-  ctx.closePath();
-  ctx.fillStyle = leftColor;
-  ctx.fill();
+  ctx.moveTo(sx-hw,sy); ctx.lineTo(sx,sy+hh);
+  ctx.lineTo(sx,sy+hh+depth); ctx.lineTo(sx-hw,sy+depth);
+  ctx.closePath(); ctx.fillStyle=left; ctx.fill();
 
   // Right face
   ctx.beginPath();
-  ctx.moveTo(sx,      sy + hh);
-  ctx.lineTo(sx + hw, sy);
-  ctx.lineTo(sx + hw, sy + depth);
-  ctx.lineTo(sx,      sy + hh + depth);
-  ctx.closePath();
-  ctx.fillStyle = rightColor;
-  ctx.fill();
+  ctx.moveTo(sx,sy+hh); ctx.lineTo(sx+hw,sy);
+  ctx.lineTo(sx+hw,sy+depth); ctx.lineTo(sx,sy+hh+depth);
+  ctx.closePath(); ctx.fillStyle=right; ctx.fill();
 
   // Outline
-  ctx.strokeStyle = isMy ? 'rgba(60,30,0,0.35)' : 'rgba(60,10,0,0.35)';
-  ctx.lineWidth = 0.6;
+  ctx.strokeStyle=isMy?'rgba(60,30,0,0.3)':'rgba(60,10,0,0.3)';
+  ctx.lineWidth=0.5;
   ctx.beginPath();
-  ctx.moveTo(sx,      sy - hh);
-  ctx.lineTo(sx + hw, sy);
-  ctx.lineTo(sx,      sy + hh);
-  ctx.lineTo(sx - hw, sy);
-  ctx.closePath();
-  ctx.stroke();
+  ctx.moveTo(sx,sy-hh); ctx.lineTo(sx+hw,sy);
+  ctx.lineTo(sx,sy+hh); ctx.lineTo(sx-hw,sy);
+  ctx.closePath(); ctx.stroke();
 }
 
-function drawIsoHighlight(origin, gx, gz, fillColor, strokeColor) {
-  const p = toScreen(origin, gx, gz);
-  const hw = TW / 2, hh = TH / 2;
+function drawIsoHighlight(origin,TW,TH,gx,gz,fill,stroke){
+  const p=toScreen(origin,TW,TH,gx,gz);
+  const hw=TW/2,hh=TH/2;
   ctx.beginPath();
-  ctx.moveTo(p.x,      p.y - hh);
-  ctx.lineTo(p.x + hw, p.y);
-  ctx.lineTo(p.x,      p.y + hh);
-  ctx.lineTo(p.x - hw, p.y);
+  ctx.moveTo(p.x,p.y-hh); ctx.lineTo(p.x+hw,p.y);
+  ctx.lineTo(p.x,p.y+hh); ctx.lineTo(p.x-hw,p.y);
   ctx.closePath();
-  ctx.fillStyle = fillColor;
-  ctx.fill();
-  ctx.strokeStyle = strokeColor;
-  ctx.lineWidth = 1.5;
-  ctx.stroke();
+  ctx.fillStyle=fill; ctx.fill();
+  ctx.strokeStyle=stroke; ctx.lineWidth=1.5; ctx.stroke();
 }
 
-// ─── ISO CANNON (2.5D) ──────────────────────────────────────
-function drawIsoCannon(origin, gx, gz, isEnemy, selected) {
-  const p = toScreen(origin, gx, gz);
-  const cx = p.x;
-  const cy = p.y; // center of tile top face
-  const s = TW * 0.38; // scale
+// ── Cannon 2.5D ────────────────────────────────
+function drawIsoCannon(origin,TW,TH,gx,gz,isEnemy,selected){
+  const p=toScreen(origin,TW,TH,gx,gz);
+  const cx=p.x, cy=p.y;
+  const s=TW*0.38;
 
-  // Glow if selected
-  if (selected) {
+  if(selected){
     ctx.beginPath();
-    ctx.ellipse(cx, cy + TH*0.1, s*1.4, s*0.5, 0, 0, Math.PI*2);
-    ctx.fillStyle = 'rgba(40,120,255,0.25)';
-    ctx.fill();
+    ctx.ellipse(cx,cy+TH*0.1,s*1.4,s*0.45,0,0,Math.PI*2);
+    ctx.fillStyle='rgba(40,120,255,0.22)'; ctx.fill();
   }
 
-  // Ground shadow
+  // Shadow
   ctx.beginPath();
-  ctx.ellipse(cx, cy + TH*0.15, s*0.9, s*0.28, 0, 0, Math.PI*2);
-  ctx.fillStyle = 'rgba(0,0,0,0.22)';
-  ctx.fill();
+  ctx.ellipse(cx,cy+TH*0.15,s*0.85,s*0.26,0,0,Math.PI*2);
+  ctx.fillStyle='rgba(0,0,0,0.2)'; ctx.fill();
 
-  // ── Wheels ──
-  const wheelR = s * 0.28;
-  const wheelY = cy + TH*0.05;
-  [-s*0.38, s*0.38].forEach(wx => {
-    // Wheel side (3D look: ellipse)
+  // Wheels
+  const wr=s*0.27, wy=cy+TH*0.05;
+  [-s*0.36,s*0.36].forEach(wx=>{
     ctx.beginPath();
-    ctx.ellipse(cx+wx, wheelY, wheelR*0.35, wheelR, 0, 0, Math.PI*2);
-    ctx.fillStyle = isEnemy ? '#2a0000' : '#001828';
-    ctx.fill();
-    ctx.strokeStyle = isEnemy ? '#cc3333' : '#3366cc';
-    ctx.lineWidth = 1.5;
-    ctx.stroke();
-    // Spokes
-    for (let a=0; a<4; a++) {
-      const ang = a * Math.PI/4;
+    ctx.ellipse(cx+wx,wy,wr*0.32,wr,0,0,Math.PI*2);
+    ctx.fillStyle=isEnemy?'#2a0000':'#001828'; ctx.fill();
+    ctx.strokeStyle=isEnemy?'#cc3333':'#3366cc'; ctx.lineWidth=1.5; ctx.stroke();
+    for(let a=0;a<4;a++){
+      const ang=a*Math.PI/4;
       ctx.beginPath();
-      ctx.moveTo(cx+wx + Math.cos(ang)*wheelR*0.28, wheelY + Math.sin(ang)*wheelR*0.8);
-      ctx.lineTo(cx+wx - Math.cos(ang)*wheelR*0.28, wheelY - Math.sin(ang)*wheelR*0.8);
-      ctx.strokeStyle = isEnemy ? '#884444' : '#448888';
-      ctx.lineWidth = 0.8;
-      ctx.stroke();
+      ctx.moveTo(cx+wx+Math.cos(ang)*wr*0.27,wy+Math.sin(ang)*wr*0.78);
+      ctx.lineTo(cx+wx-Math.cos(ang)*wr*0.27,wy-Math.sin(ang)*wr*0.78);
+      ctx.strokeStyle=isEnemy?'#884444':'#448888'; ctx.lineWidth=0.8; ctx.stroke();
     }
-    // Hub
-    ctx.beginPath();
-    ctx.arc(cx+wx, wheelY, wheelR*0.12, 0, Math.PI*2);
-    ctx.fillStyle = isEnemy ? '#cc3333' : '#3366cc';
-    ctx.fill();
+    ctx.beginPath(); ctx.arc(cx+wx,wy,wr*0.11,0,Math.PI*2);
+    ctx.fillStyle=isEnemy?'#cc3333':'#3366cc'; ctx.fill();
   });
 
-  // ── Axle ──
+  // Axle
+  ctx.beginPath(); ctx.moveTo(cx-s*0.36,wy); ctx.lineTo(cx+s*0.36,wy);
+  ctx.strokeStyle=isEnemy?'#551111':'#112244'; ctx.lineWidth=Math.max(2,s*0.11); ctx.stroke();
+
+  // Carriage body (iso box)
+  const bw=s*0.88, by=wy-s*0.42-s*0.06;
+  // Top
   ctx.beginPath();
-  ctx.moveTo(cx - s*0.38, wheelY);
-  ctx.lineTo(cx + s*0.38, wheelY);
-  ctx.strokeStyle = isEnemy ? '#551111' : '#112244';
-  ctx.lineWidth = Math.max(2, s*0.12);
-  ctx.stroke();
-
-  // ── Carriage body (iso box) ──
-  const bw = s * 0.9, bh = s * 0.42, bd = s * 0.32;
-  const bx = cx - bw/2, by = wheelY - bh - bd*0.2;
-
-  // Top face
+  ctx.moveTo(cx,by-s*0.18); ctx.lineTo(cx+bw/2,by); ctx.lineTo(cx,by+s*0.18); ctx.lineTo(cx-bw/2,by);
+  ctx.closePath(); ctx.fillStyle=isEnemy?'#8b2020':'#1a4080'; ctx.fill();
+  // Front
+  const fh=s*0.38;
   ctx.beginPath();
-  ctx.moveTo(cx,      by - bd*0.4);
-  ctx.lineTo(cx+bw/2, by);
-  ctx.lineTo(cx,      by + bd*0.4);
-  ctx.lineTo(cx-bw/2, by);
-  ctx.closePath();
-  ctx.fillStyle = isEnemy ? '#8b2020' : '#1a4080';
-  ctx.fill();
-
-  // Front face (toward viewer)
+  ctx.moveTo(cx-bw/2,by); ctx.lineTo(cx,by+s*0.18);
+  ctx.lineTo(cx,by+s*0.18+fh); ctx.lineTo(cx-bw/2,by+fh);
+  ctx.closePath(); ctx.fillStyle=isEnemy?'#5a1010':'#102860'; ctx.fill();
+  // Right
   ctx.beginPath();
-  ctx.moveTo(cx-bw/2, by);
-  ctx.lineTo(cx,      by + bd*0.4);
-  ctx.lineTo(cx,      by + bh + bd*0.4);
-  ctx.lineTo(cx-bw/2, by + bh);
-  ctx.closePath();
-  ctx.fillStyle = isEnemy ? '#5a1010' : '#102860';
-  ctx.fill();
+  ctx.moveTo(cx,by+s*0.18); ctx.lineTo(cx+bw/2,by);
+  ctx.lineTo(cx+bw/2,by+fh); ctx.lineTo(cx,by+s*0.18+fh);
+  ctx.closePath(); ctx.fillStyle=isEnemy?'#3a0808':'#0a1a40'; ctx.fill();
 
-  // Right face
-  ctx.beginPath();
-  ctx.moveTo(cx,      by + bd*0.4);
-  ctx.lineTo(cx+bw/2, by);
-  ctx.lineTo(cx+bw/2, by + bh);
-  ctx.lineTo(cx,      by + bh + bd*0.4);
-  ctx.closePath();
-  ctx.fillStyle = isEnemy ? '#3a0808' : '#0a1a40';
-  ctx.fill();
-
-  // ── Barrel (iso: angled in 2.5D) ──
-  const barLen = s * 0.95;
-  const barW   = s * 0.14;
-  // Barrel goes "up and left" in iso perspective
-  const bEndX = cx - barLen * 0.55;
-  const bEndY = by - barLen * 0.75;
-
-  // Barrel shadow
-  ctx.beginPath();
-  ctx.moveTo(cx + barW*0.3, by - barW*0.3);
-  ctx.lineTo(bEndX + barW*0.3, bEndY + barW*0.3);
-  ctx.strokeStyle = isEnemy ? '#1a0000' : '#000a1a';
-  ctx.lineWidth = barW * 1.4;
-  ctx.lineCap = 'round';
-  ctx.stroke();
-
-  // Barrel main
-  ctx.beginPath();
-  ctx.moveTo(cx, by);
-  ctx.lineTo(bEndX, bEndY);
-  ctx.strokeStyle = isEnemy ? '#cc2222' : '#2255bb';
-  ctx.lineWidth = barW * 1.2;
-  ctx.lineCap = 'round';
-  ctx.stroke();
-
-  // Barrel highlight
-  ctx.beginPath();
-  ctx.moveTo(cx - barW*0.2, by - barW*0.4);
-  ctx.lineTo(bEndX - barW*0.2, bEndY - barW*0.4);
-  ctx.strokeStyle = isEnemy ? 'rgba(255,100,100,0.5)' : 'rgba(100,150,255,0.5)';
-  ctx.lineWidth = barW * 0.4;
-  ctx.stroke();
-
-  // Muzzle cap
-  ctx.beginPath();
-  ctx.arc(bEndX, bEndY, barW*0.85, 0, Math.PI*2);
-  ctx.fillStyle = isEnemy ? '#ff4444' : '#4477ff';
-  ctx.fill();
+  // Barrel
+  const barLen=s*0.92, barW=s*0.13;
+  const bEndX=cx-barLen*0.52, bEndY=by-barLen*0.72;
+  ctx.beginPath(); ctx.moveTo(cx+barW*0.3,by-barW*0.3); ctx.lineTo(bEndX+barW*0.3,bEndY+barW*0.3);
+  ctx.strokeStyle=isEnemy?'#1a0000':'#000a1a'; ctx.lineWidth=barW*1.4; ctx.lineCap='round'; ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(cx,by); ctx.lineTo(bEndX,bEndY);
+  ctx.strokeStyle=isEnemy?'#cc2222':'#2255bb'; ctx.lineWidth=barW*1.2; ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(cx-barW*0.2,by-barW*0.4); ctx.lineTo(bEndX-barW*0.2,bEndY-barW*0.4);
+  ctx.strokeStyle=isEnemy?'rgba(255,100,100,0.5)':'rgba(100,150,255,0.5)'; ctx.lineWidth=barW*0.4; ctx.stroke();
+  ctx.beginPath(); ctx.arc(bEndX,bEndY,barW*0.82,0,Math.PI*2);
+  ctx.fillStyle=isEnemy?'#ff4444':'#4477ff'; ctx.fill();
 
   // Pulse ring
-  const alpha = 0.25 + Math.sin(Date.now()*0.003)*0.15;
-  ctx.beginPath();
-  ctx.ellipse(cx, cy, s*0.9, s*0.3, 0, 0, Math.PI*2);
-  ctx.strokeStyle = isEnemy ? `rgba(220,60,60,${alpha})` : `rgba(60,120,220,${alpha})`;
-  ctx.lineWidth = 1.5;
-  ctx.stroke();
+  const alpha=0.22+Math.sin(Date.now()*0.003)*0.13;
+  ctx.beginPath(); ctx.ellipse(cx,cy,s*0.88,s*0.28,0,0,Math.PI*2);
+  ctx.strokeStyle=isEnemy?`rgba(220,60,60,${alpha})`:`rgba(60,120,220,${alpha})`;
+  ctx.lineWidth=1.5; ctx.stroke();
 }
 
-function drawIsoDestroyed(origin, gx, gz) {
-  const p = toScreen(origin, gx, gz);
-  const cx = p.x, cy = p.y;
-  const s = TW * 0.3;
-
-  ctx.beginPath();
-  ctx.ellipse(cx, cy + TH*0.1, s*0.9, s*0.3, 0, 0, Math.PI*2);
-  ctx.fillStyle = '#1a0a00';
-  ctx.fill();
-
-  const t = Date.now() * 0.005;
-  for (let i=0; i<4; i++) {
-    const fx = cx + Math.sin(t*1.2+i*1.5)*s*0.3;
-    const fy = cy - Math.abs(Math.sin(t+i))*s*0.7 + TH*0.1;
-    const fr = s*(0.18+Math.sin(t*1.8+i)*0.07);
-    const grad = ctx.createRadialGradient(fx,fy,0,fx,fy,fr*2);
-    grad.addColorStop(0,'rgba(255,220,50,0.95)');
-    grad.addColorStop(0.5,'rgba(255,80,0,0.7)');
-    grad.addColorStop(1,'rgba(80,0,0,0)');
-    ctx.beginPath(); ctx.arc(fx,fy,fr*2,0,Math.PI*2);
-    ctx.fillStyle=grad; ctx.fill();
+function drawIsoDestroyed(origin,TW,TH,gx,gz){
+  const p=toScreen(origin,TW,TH,gx,gz);
+  const cx=p.x, cy=p.y, s=TW*0.28;
+  ctx.beginPath(); ctx.ellipse(cx,cy+TH*0.1,s*0.88,s*0.28,0,0,Math.PI*2);
+  ctx.fillStyle='#1a0a00'; ctx.fill();
+  const t=Date.now()*0.005;
+  for(let i=0;i<4;i++){
+    const fx=cx+Math.sin(t*1.2+i*1.5)*s*0.28;
+    const fy=cy-Math.abs(Math.sin(t+i))*s*0.65+TH*0.08;
+    const fr=s*(0.16+Math.sin(t*1.8+i)*0.06);
+    const g=ctx.createRadialGradient(fx,fy,0,fx,fy,fr*2);
+    g.addColorStop(0,'rgba(255,220,50,0.95)');
+    g.addColorStop(0.5,'rgba(255,80,0,0.7)');
+    g.addColorStop(1,'rgba(80,0,0,0)');
+    ctx.beginPath(); ctx.arc(fx,fy,fr*2,0,Math.PI*2); ctx.fillStyle=g; ctx.fill();
   }
 }
 
-// ─── PARTICLES ──────────────────────────────────────────────
-function drawParticles() {
-  particles.forEach(p => {
-    ctx.globalAlpha = Math.max(0, p.life);
-    if (p.type === 'fire') {
-      const g = ctx.createRadialGradient(p.x,p.y,0,p.x,p.y,p.r);
-      g.addColorStop(0,'rgba(255,200,50,1)');
-      g.addColorStop(0.5,'rgba(255,60,0,0.8)');
-      g.addColorStop(1,'rgba(80,0,0,0)');
-      ctx.beginPath(); ctx.arc(p.x,p.y,p.r,0,Math.PI*2);
-      ctx.fillStyle=g; ctx.fill();
-    } else if (p.type === 'smoke') {
+// ── Particles ──────────────────────────────────
+function drawParticles(){
+  particles.forEach(p=>{
+    ctx.globalAlpha=Math.max(0,p.life);
+    if(p.type==='fire'){
+      const g=ctx.createRadialGradient(p.x,p.y,0,p.x,p.y,p.r);
+      g.addColorStop(0,'rgba(255,200,50,1)'); g.addColorStop(0.5,'rgba(255,60,0,0.8)'); g.addColorStop(1,'rgba(80,0,0,0)');
+      ctx.beginPath(); ctx.arc(p.x,p.y,p.r,0,Math.PI*2); ctx.fillStyle=g; ctx.fill();
+    } else if(p.type==='smoke'){
       ctx.beginPath(); ctx.arc(p.x,p.y,p.r,0,Math.PI*2);
       ctx.fillStyle=`rgba(80,60,40,${p.life*0.35})`; ctx.fill();
     } else {
@@ -562,201 +470,95 @@ function drawParticles() {
       ctx.fillStyle=`rgba(${p.cr},${p.cg},${p.cb},${p.life})`; ctx.fill();
     }
   });
-  ctx.globalAlpha = 1;
+  ctx.globalAlpha=1;
 }
 
-function isoWorldPos(origin, gx, gz) {
-  const p = toScreen(origin, gx, gz);
-  return { x: p.x, y: p.y + TH*0.1 };
+function isoPos(origin,TW,TH,gx,gz){ const p=toScreen(origin,TW,TH,gx,gz); return {x:p.x,y:p.y+TH*0.1}; }
+
+function spawnExplosion(origin,TW,TH,gx,gz){
+  const pos=isoPos(origin,TW,TH,gx,gz);
+  for(let i=0;i<20;i++){const a=Math.random()*Math.PI*2,sp=2+Math.random()*5;particles.push({type:'fire',x:pos.x,y:pos.y,vx:Math.cos(a)*sp,vy:Math.sin(a)*sp-sp*0.6,r:TW*(0.17+Math.random()*0.2),life:1,decay:0.02+Math.random()*0.015});}
+  for(let i=0;i<7;i++){const a=Math.random()*Math.PI*2,sp=1+Math.random()*1.5;particles.push({type:'smoke',x:pos.x,y:pos.y-TH*0.3,vx:Math.cos(a)*sp*0.3,vy:-sp,r:TW*(0.18+Math.random()*0.22),life:0.85,decay:0.01+Math.random()*0.008});}
+  for(let i=0;i<10;i++){const a=Math.random()*Math.PI*2,sp=3+Math.random()*4;particles.push({type:'debris',x:pos.x,y:pos.y,vx:Math.cos(a)*sp,vy:Math.sin(a)*sp-3,r:2+Math.random()*3,life:1,decay:0.03,cr:30,cg:20,cb:10});}
 }
 
-function spawnExplosion(origin, gx, gz) {
-  const pos = isoWorldPos(origin, gx, gz);
-  for (let i=0; i<22; i++) {
-    const a=Math.random()*Math.PI*2, sp=(2+Math.random()*5);
-    particles.push({type:'fire',x:pos.x,y:pos.y,vx:Math.cos(a)*sp,vy:Math.sin(a)*sp-sp*0.6,r:TW*(0.18+Math.random()*0.22),life:1,decay:0.02+Math.random()*0.015});
-  }
-  for (let i=0; i<8; i++) {
-    const a=Math.random()*Math.PI*2, sp=1+Math.random()*1.5;
-    particles.push({type:'smoke',x:pos.x,y:pos.y-TH*0.3,vx:Math.cos(a)*sp*0.3,vy:-sp,r:TW*(0.2+Math.random()*0.25),life:0.85,decay:0.01+Math.random()*0.008});
-  }
-  for (let i=0; i<10; i++) {
-    const a=Math.random()*Math.PI*2, sp=3+Math.random()*4;
-    particles.push({type:'debris',x:pos.x,y:pos.y,vx:Math.cos(a)*sp,vy:Math.sin(a)*sp-3,r:2+Math.random()*3,life:1,decay:0.03,cr:30,cg:20,cb:10});
-  }
-}
-
-function spawnMiss(origin, gx, gz) {
-  const pos = isoWorldPos(origin, gx, gz);
+function spawnMiss(origin,TW,TH,gx,gz){
+  const pos=isoPos(origin,TW,TH,gx,gz);
   const browns=[[139,100,35],[120,80,20],[160,120,50],[100,70,15],[150,110,40]];
-  for (let i=0; i<16; i++) {
-    const a=-Math.PI/2+(-1+Math.random()*2), sp=2+Math.random()*4;
-    const b=browns[Math.floor(Math.random()*browns.length)];
-    particles.push({type:'dirt',x:pos.x+(Math.random()-0.5)*TW*0.4,y:pos.y,vx:Math.cos(a)*sp*(0.5+Math.random()),vy:Math.sin(a)*sp,r:3+Math.random()*5,life:1,decay:0.024+Math.random()*0.018,cr:b[0],cg:b[1],cb:b[2]});
-  }
-  // Crater mark
-  particles.push({type:'dirt',x:pos.x,y:pos.y,vx:0,vy:0,r:TW*0.28,life:0.55,decay:0.007,cr:70,cg:45,cb:10});
+  for(let i=0;i<16;i++){const a=-Math.PI/2+(-1+Math.random()*2),sp=2+Math.random()*4,b=browns[Math.floor(Math.random()*5)];particles.push({type:'dirt',x:pos.x+(Math.random()-0.5)*TW*0.4,y:pos.y,vx:Math.cos(a)*sp*(0.5+Math.random()),vy:Math.sin(a)*sp,r:3+Math.random()*4,life:1,decay:0.024+Math.random()*0.018,cr:b[0],cg:b[1],cb:b[2]});}
+  particles.push({type:'dirt',x:pos.x,y:pos.y,vx:0,vy:0,r:TW*0.25,life:0.5,decay:0.007,cr:70,cg:45,cb:10});
 }
 
-function updateParticles() {
-  for (let i=particles.length-1; i>=0; i--) {
+function updateParticles(){
+  for(let i=particles.length-1;i>=0;i--){
     const p=particles[i];
-    if (p.vx !== undefined) {
-      p.x+=p.vx; p.y+=p.vy;
-      if (p.type==='dirt'||p.type==='debris') p.vy+=0.15;
-      if (p.type==='smoke') { p.r+=0.25; p.vx*=0.95; p.vy*=0.95; }
-      if (p.type==='fire') p.r*=0.97;
-    }
+    if(p.vx!==undefined){p.x+=p.vx;p.y+=p.vy;if(p.type==='dirt'||p.type==='debris')p.vy+=0.15;if(p.type==='smoke'){p.r+=0.25;p.vx*=0.95;p.vy*=0.95;}if(p.type==='fire')p.r*=0.97;}
     p.life-=p.decay;
-    if (p.life<=0) particles.splice(i,1);
+    if(p.life<=0)particles.splice(i,1);
   }
 }
 
-// ─── HIT TESTING ────────────────────────────────────────────
-// Find which tile was clicked using inverse iso transform
-function clickToGrid(origin, mx, my) {
-  const {gx, gz} = toGrid(origin, mx, my);
-  if (inBounds(gx, gz)) return {gx, gz};
-  return null;
-}
-
-// ─── MOVE CELLS ─────────────────────────────────────────────
-function calcMoveCells(idx) {
-  const c=myCannons[idx]; const cells=[];
-  for(let x=0;x<GRID;x++) for(let y=0;y<GRID;y++){
+// ── Move cells ─────────────────────────────────
+function calcMoveCells(idx){
+  const c=myCannons[idx],cells=[];
+  for(let x=0;x<GRID;x++)for(let y=0;y<GRID;y++){
     const dist=Math.abs(x-c.x)+Math.abs(y-c.y);
-    if(dist>0&&dist<=MOVE_RANGE){
-      const blocked=myCannons.some((mc,mi)=>mi!==idx&&myAlive[mi]&&mc.x===x&&mc.y===y);
-      if(!blocked) cells.push({x,y});
-    }
+    if(dist>0&&dist<=MOVE_RANGE){const blocked=myCannons.some((mc,mi)=>mi!==idx&&myAlive[mi]&&mc.x===x&&mc.y===y);if(!blocked)cells.push({x,y});}
   }
   return cells;
 }
 
-// ─── GAME LOOP ──────────────────────────────────────────────
-function gameLoop() {
-  updateParticles(); draw();
-  animFrame = requestAnimationFrame(gameLoop);
-}
+function gameLoop(){ updateParticles(); draw(); animFrame=requestAnimationFrame(gameLoop); }
 
-// ─── CLICK ──────────────────────────────────────────────────
-canvas.addEventListener('click', e => {
-  if (!myTurn || !mode) return;
+// ── Click ──────────────────────────────────────
+canvas.addEventListener('click',e=>{
+  if(!myTurn||!mode)return;
   const rect=canvas.getBoundingClientRect();
   const scaleX=canvas.width/rect.width, scaleY=canvas.height/rect.height;
   const mx=(e.clientX-rect.left)*scaleX, my=(e.clientY-rect.top)*scaleY;
 
-  if (mode==='fire') {
-    const cell = clickToGrid(enOrigin, mx, my);
-    if (cell) {
-      sendAction({type:'fire', x:cell.gx, y:cell.gz});
-      disableButtons(); hintEl.textContent='';
-    }
-  } else if (mode==='move') {
-    if (selectedCannonIdx===null) {
-      // Check if clicked on a cannon
-      for (let i=0; i<myCannons.length; i++) {
-        if (!myAlive[i]) continue;
-        const c=myCannons[i];
-        const p=toScreen(myOrigin, c.x, c.y);
-        const dx=mx-p.x, dy=my-p.y;
-        if (Math.sqrt(dx*dx+dy*dy)<TW*0.55) {
-          selectedCannonIdx=i; moveCells=calcMoveCells(i);
-          hintEl.textContent='Select destination (up to 4 cells)'; break;
-        }
+  if(mode==='fire'){
+    const {gx,gz}=toGrid(enOrigin,TW_EN,TH_EN,mx,my);
+    if(inBounds(gx,gz)){sendAction({type:'fire',x:gx,y:gz});disableButtons();hintEl.textContent='';}
+  } else if(mode==='move'){
+    if(selectedCannonIdx===null){
+      for(let i=0;i<myCannons.length;i++){
+        if(!myAlive[i])continue;
+        const p=toScreen(myOrigin,TW_MY,TH_MY,myCannons[i].x,myCannons[i].y);
+        const dx=mx-p.x,dy=my-p.y;
+        if(Math.sqrt(dx*dx+dy*dy)<TW_MY*0.55){selectedCannonIdx=i;moveCells=calcMoveCells(i);hintEl.textContent='Select destination (up to 4 cells)';break;}
       }
     } else {
-      const cell = clickToGrid(myOrigin, mx, my);
-      if (cell) {
-        const valid = moveCells.find(mc=>mc.x===cell.gx&&mc.y===cell.gz);
-        if (valid) {
-          sendAction({type:'move', cannonIndex:selectedCannonIdx, x:cell.gx, y:cell.gz});
-          disableButtons(); selectedCannonIdx=null; moveCells=[]; hintEl.textContent='';
-        } else { hintEl.textContent='Invalid — choose a highlighted cell'; }
+      const {gx,gz}=toGrid(myOrigin,TW_MY,TH_MY,mx,my);
+      if(inBounds(gx,gz)){
+        const valid=moveCells.find(mc=>mc.x===gx&&mc.y===gz);
+        if(valid){sendAction({type:'move',cannonIndex:selectedCannonIdx,x:gx,y:gz});disableButtons();selectedCannonIdx=null;moveCells=[];hintEl.textContent='';}
+        else hintEl.textContent='Invalid — choose a highlighted cell';
       }
     }
   }
 });
 
-// ─── TIMER ──────────────────────────────────────────────────
-function startTimer(s) {
-  clearInterval(timerInterval); turnDuration=s; turnEndTime=Date.now()+s*1000;
-  timerInterval=setInterval(()=>{
-    const left=(turnEndTime-Date.now())/1000, pct=Math.max(0,left/turnDuration)*100;
-    timerFill.style.width=pct+'%';
-    timerFill.style.background=pct>50?'#e8a020':pct>25?'#e06010':'#cc2000';
-    if(left<=0)clearInterval(timerInterval);
-  },80);
-}
+function startTimer(s){clearInterval(timerInterval);turnDuration=s;turnEndTime=Date.now()+s*1000;timerInterval=setInterval(()=>{const left=(turnEndTime-Date.now())/1000,pct=Math.max(0,left/turnDuration)*100;timerFill.style.width=pct+'%';timerFill.style.background=pct>50?'#e8a020':pct>25?'#e06010':'#cc2000';if(left<=0)clearInterval(timerInterval);},80);}
 
-function selectMode(m) {
-  if(!myTurn)return; mode=m; selectedCannonIdx=null; moveCells=[];
-  if(mode==='fire'){btnFire.classList.add('active');btnMove.classList.remove('active');hintEl.textContent='Select target in enemy territory';}
-  else{btnMove.classList.add('active');btnFire.classList.remove('active');hintEl.textContent='Select your cannon to move';}
-}
+function selectMode(m){if(!myTurn)return;mode=m;selectedCannonIdx=null;moveCells=[];if(mode==='fire'){btnFire.classList.add('active');btnMove.classList.remove('active');hintEl.textContent='Select target in enemy territory';}else{btnMove.classList.add('active');btnFire.classList.remove('active');hintEl.textContent='Select your cannon to move';}}
 
-// ─── WEBSOCKET ──────────────────────────────────────────────
 const SERVER_URL=(()=>{const p=location.protocol==='https:'?'wss:':'ws:';return `${p}//${location.host}`;})();
-
-function findGame() {
-  showScreen('screen-waiting');
-  ws=new WebSocket(SERVER_URL);
-  ws.onopen=()=>ws.send(JSON.stringify({type:'find_game'}));
-  ws.onmessage=(e)=>handleMessage(JSON.parse(e.data));
-  ws.onerror=()=>{alert('Connection error');resetGame();};
-}
+function findGame(){showScreen('screen-waiting');ws=new WebSocket(SERVER_URL);ws.onopen=()=>ws.send(JSON.stringify({type:'find_game'}));ws.onmessage=(e)=>handleMessage(JSON.parse(e.data));ws.onerror=()=>{alert('Connection error');resetGame();};}
 function sendAction(a){if(ws&&ws.readyState===1)ws.send(JSON.stringify({type:'action',action:a}));}
 
-function handleMessage(msg) {
-  if(msg.type==='game_start'){
-    playerIndex=msg.playerIndex; myCannons=msg.myCannons; enemyCannons=msg.enemyCannons;
-    myAlive=[true,true]; enemyAlive=[true,true]; enemyRevealed=[false,false];
-    showScreen(null); fieldLabels.style.display='flex';
-    layout(); if(!animFrame) gameLoop();
-    setStatus(msg.currentTurn===playerIndex?'Your Turn':'Enemy Turn');
-  }
-  if(msg.type==='turn_start'){
-    myTurn=msg.yourTurn; mode=null; selectedCannonIdx=null; moveCells=[]; startTimer(msg.timeLeft);
-    if(myTurn){setStatus('Your Turn!');btnFire.disabled=false;btnMove.disabled=false;hintEl.textContent='Choose an action';btnFire.classList.remove('active');btnMove.classList.remove('active');}
-    else{setStatus('Enemy Turn...');disableButtons();hintEl.textContent='';}
-  }
-  if(msg.type==='turn_result'){
-    const action=msg.action; myCannons=msg.myCannons; enemyAlive=msg.enemyAlive;
-    if(action&&action.type==='fire'){
-      if(!myTurn){
-        if(msg.hit){spawnExplosion(myOrigin,action.x,action.y);myAlive[msg.cannonIndex]=false;}
-        else spawnMiss(myOrigin,action.x,action.y);
-      } else {
-        if(msg.hit){spawnExplosion(enOrigin,action.x,action.y);enemyAlive[msg.cannonIndex]=false;enemyRevealed[msg.cannonIndex]=true;}
-        else spawnMiss(enOrigin,action.x,action.y);
-      }
-    }
-    myTurn=false;
-  }
-  if(msg.type==='game_over'){
-    clearInterval(timerInterval); fieldLabels.style.display='none';
-    enemyRevealed=[true,true];
-    document.getElementById('gameover-icon').textContent=msg.youWin?'🏆':'💥';
-    document.getElementById('gameover-title').textContent=msg.youWin?'Victory!':'Defeat';
-    document.getElementById('gameover-sub').textContent=msg.youWin?'All enemy cannons destroyed!':'Your cannons were destroyed.';
-    setTimeout(()=>showScreen('screen-gameover'),1800);
-  }
-  if(msg.type==='opponent_left'){clearInterval(timerInterval);fieldLabels.style.display='none';showScreen('screen-left');}
+function handleMessage(msg){
+  if(msg.type==='game_start'){playerIndex=msg.playerIndex;myCannons=msg.myCannons;enemyCannons=msg.enemyCannons;myAlive=[true,true];enemyAlive=[true,true];enemyRevealed=[false,false];showScreen(null);layout();if(!animFrame)gameLoop();setStatus(msg.currentTurn===playerIndex?'Your Turn':'Enemy Turn');}
+  if(msg.type==='turn_start'){myTurn=msg.yourTurn;mode=null;selectedCannonIdx=null;moveCells=[];startTimer(msg.timeLeft);if(myTurn){setStatus('Your Turn!');btnFire.disabled=false;btnMove.disabled=false;hintEl.textContent='Choose an action';btnFire.classList.remove('active');btnMove.classList.remove('active');}else{setStatus('Enemy Turn...');disableButtons();hintEl.textContent='';}}
+  if(msg.type==='turn_result'){const action=msg.action;myCannons=msg.myCannons;enemyAlive=msg.enemyAlive;if(action&&action.type==='fire'){if(!myTurn){if(msg.hit){spawnExplosion(myOrigin,TW_MY,TH_MY,action.x,action.y);myAlive[msg.cannonIndex]=false;}else spawnMiss(myOrigin,TW_MY,TH_MY,action.x,action.y);}else{if(msg.hit){spawnExplosion(enOrigin,TW_EN,TH_EN,action.x,action.y);enemyAlive[msg.cannonIndex]=false;enemyRevealed[msg.cannonIndex]=true;}else spawnMiss(enOrigin,TW_EN,TH_EN,action.x,action.y);}}myTurn=false;}
+  if(msg.type==='game_over'){clearInterval(timerInterval);enemyRevealed=[true,true];document.getElementById('gameover-icon').textContent=msg.youWin?'🏆':'💥';document.getElementById('gameover-title').textContent=msg.youWin?'Victory!':'Defeat';document.getElementById('gameover-sub').textContent=msg.youWin?'All enemy cannons destroyed!':'Your cannons were destroyed.';setTimeout(()=>showScreen('screen-gameover'),1800);}
+  if(msg.type==='opponent_left'){clearInterval(timerInterval);showScreen('screen-left');}
 }
 
 function showScreen(id){['screen-menu','screen-waiting','screen-gameover','screen-left'].forEach(s=>{document.getElementById(s).style.display=s===id?'flex':'none';});}
 function setStatus(t){statusEl.textContent=t;}
 function disableButtons(){btnFire.disabled=true;btnMove.disabled=true;btnFire.classList.remove('active');btnMove.classList.remove('active');}
-function resetGame(){
-  if(ws){ws.close();ws=null;} clearInterval(timerInterval);
-  if(animFrame){cancelAnimationFrame(animFrame);animFrame=null;}
-  disableButtons(); mode=null; selectedCannonIdx=null; moveCells=[]; myTurn=false;
-  timerFill.style.width='100%'; hintEl.textContent=''; fieldLabels.style.display='none';
-  setStatus('Waiting...'); myCannons=[]; enemyCannons=[]; particles=[];
-  enemyRevealed=[false,false];
-  ctx.clearRect(0,0,canvas.width,canvas.height);
-  showScreen('screen-menu');
-}
+function resetGame(){if(ws){ws.close();ws=null;}clearInterval(timerInterval);if(animFrame){cancelAnimationFrame(animFrame);animFrame=null;}disableButtons();mode=null;selectedCannonIdx=null;moveCells=[];myTurn=false;timerFill.style.width='100%';hintEl.textContent='';setStatus('Waiting...');myCannons=[];enemyCannons=[];particles=[];enemyRevealed=[false,false];ctx.clearRect(0,0,canvas.width,canvas.height);showScreen('screen-menu');}
 window.addEventListener('resize',()=>{if(myCannons.length)layout();});
 </script>
 </body>
