@@ -49,6 +49,7 @@ body {
   justify-content:center;
   overflow:hidden;
   min-height:0;
+  max-height:70vh;
   background:#d4c9a8;
 }
 canvas { display:block; }
@@ -126,8 +127,8 @@ canvas { display:block; }
   <div id="timer-bar"><div id="timer-fill"></div></div>
 </div>
 <div id="field-labels">
-  <div class="field-label enemy">⬆ Enemy Territory</div>
-  <div class="field-label my">⬇ Your Territory</div>
+  <div class="field-label enemy">◀ Enemy Territory</div>
+  <div class="field-label my">Your Territory ▶</div>
 </div>
 <div id="canvas-wrap"><canvas id="gc"></canvas></div>
 <div id="hint"></div>
@@ -199,36 +200,23 @@ let timerInterval=null, turnDuration=TURN_TIME, turnEndTime=0;
 function layout() {
   const wrap = document.getElementById('canvas-wrap');
   const W = wrap.clientWidth;
-  const H = Math.floor(window.innerHeight * 0.72);
+  const H = Math.floor(window.innerHeight * 0.70);
 
-  // Fit two isometric grids + gap vertically
-  // Each grid: height = (GRID-1+GRID-1)*TH/2 + TH = (2*GRID-1)*TH
-  // We need 2 grids + gap (2*TH) to fit in H
-  // total height = 2*(2*GRID-1)*TH + 2*TH = (4*GRID)*TH
-  // TH = H / (4*GRID)
-  TH = Math.max(14, Math.floor(H / (GRID * 3.8)));
-  TW = TH * 2;
+  // Side-by-side: my field LEFT, enemy field RIGHT
+  // Each iso field x-span = (GRID-1)*TW, y-span = (GRID-1)*TH
+  // Two fields + gap must fit in W
+  TW = Math.max(20, Math.floor(W / (GRID * 2.4)));
+  TH = Math.floor(TW / 2);
 
-  // Canvas width: iso grid width = (GRID+GRID-1)*TW/2 ... actually max x span = (GRID-1)*TW
-  const gridW = (GRID - 1) * TW + TW;
-  const cw = Math.min(W, gridW + TW);
-  const ch = H;
-  canvas.width = cw;
+  const isoFieldH = (GRID - 1) * TH + Math.round(TH * 1.2); // include tile depth
+  const ch = Math.min(H, isoFieldH + TH * 2);
+  canvas.width = W;
   canvas.height = ch;
 
-  // Each field's iso bounding box:
-  // leftmost point: origin + (0 - (GRID-1)) * TW/2 = origin - (GRID-1)*TW/2
-  // rightmost: origin + (GRID-1)*TW/2
-  // so center origin.x = cw/2
-  const ox = cw / 2;
-
-  // Enemy field: top portion
-  // top of field = enOrigin.y, bottom = enOrigin.y + (2*GRID-2)*TH/2
-  const fieldH = (GRID - 1) * TH;
-  const gapH = TH * 1.2;
-
-  enOrigin = { x: ox, y: TH };
-  myOrigin = { x: ox, y: enOrigin.y + fieldH + gapH };
+  // Left field (mine): origin at horizontal center of left half
+  // Right field (enemy): origin at horizontal center of right half
+  myOrigin = { x: Math.floor(W * 0.27), y: TH };
+  enOrigin = { x: Math.floor(W * 0.73), y: TH };
 }
 
 // ─── DRAW ───────────────────────────────────────────────────
@@ -240,13 +228,25 @@ function draw() {
   drawIsoField(enOrigin, false);
   drawIsoField(myOrigin, true);
 
-  // No Man's Land label
-  const midY = enOrigin.y + (GRID-1)*TH + TH*0.8;
-  ctx.font = `bold ${Math.max(9, TH*0.55)}px Georgia`;
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'middle';
-  ctx.fillStyle = '#7a5a20';
-  ctx.fillText('— NO MAN\'S LAND —', canvas.width/2, midY);
+  // Vertical divider between fields
+  const midX = canvas.width / 2;
+  ctx.save();
+  ctx.strokeStyle = '#7a5a20';
+  ctx.lineWidth = 2;
+  ctx.setLineDash([6, 4]);
+  ctx.beginPath();
+  ctx.moveTo(midX, 0);
+  ctx.lineTo(midX, canvas.height);
+  ctx.stroke();
+  ctx.setLineDash([]);
+  // Labels
+  ctx.font = `bold ${Math.max(9, TH*0.5)}px Georgia`;
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  ctx.fillStyle = '#00408b';
+  ctx.fillText('YOUR SIDE', midX * 0.5, canvas.height - TH * 0.8);
+  ctx.fillStyle = '#8b0000';
+  ctx.fillText('ENEMY SIDE', midX * 1.5, canvas.height - TH * 0.8);
+  ctx.restore();
 
   // Move highlights
   if (mode === 'move' && selectedCannonIdx !== null) {
