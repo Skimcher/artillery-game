@@ -1,141 +1,154 @@
 <!DOCTYPE html>
-<html lang="uk">
+<html lang="en">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-<title>Артилерія</title>
+<title>Artillery</title>
 <style>
 * { margin:0; padding:0; box-sizing:border-box; }
 body {
-  background:#0a0e1a;
-  font-family:'Courier New',monospace;
-  color:#c8d8e8;
+  background:#f5f0e8;
+  font-family:'Georgia',serif;
+  color:#3a2a1a;
   height:100vh;
   display:flex;
   flex-direction:column;
   overflow:hidden;
   user-select:none;
 }
+
 #ui-top {
   display:flex;
   justify-content:space-between;
   align-items:center;
-  padding:7px 12px;
-  background:rgba(10,14,26,0.95);
-  border-bottom:1px solid #1a2535;
+  padding:7px 14px;
+  background:#c8a96e;
+  border-bottom:3px solid #8b6914;
   flex-shrink:0;
+  box-shadow:0 2px 8px rgba(0,0,0,0.3);
 }
-#status { font-size:12px; letter-spacing:0.06em; color:#7ab3d4; text-transform:uppercase; }
-#timer-bar { width:90px; height:5px; background:#1a2535; border-radius:3px; overflow:hidden; }
-#timer-fill { height:100%; width:100%; background:#4daaff; border-radius:3px; transition:background 0.3s; }
+#status {
+  font-size:12px;
+  letter-spacing:0.06em;
+  color:#3a1a00;
+  text-transform:uppercase;
+  font-weight:bold;
+}
+#timer-bar { width:90px; height:7px; background:#8b6914; border-radius:4px; overflow:hidden; border:1px solid #5a4000; }
+#timer-fill { height:100%; width:100%; background:#e8a020; border-radius:4px; transition:background 0.3s; }
 
 #field-labels {
   display:none;
   justify-content:space-around;
   padding:3px 0;
-  background:rgba(10,14,26,0.9);
+  background:#d4b483;
+  border-bottom:2px solid #8b6914;
   flex-shrink:0;
 }
-.field-label { font-size:10px; letter-spacing:0.08em; text-transform:uppercase; padding:1px 8px; border-radius:3px; }
-.field-label.enemy { color:#e05050; border:1px solid rgba(224,80,80,0.3); }
-.field-label.my { color:#4daaff; border:1px solid rgba(77,170,255,0.3); }
+.field-label { font-size:10px; letter-spacing:0.08em; text-transform:uppercase; padding:2px 10px; border-radius:3px; font-weight:bold; }
+.field-label.enemy { color:#8b0000; border:1px solid #8b0000; background:rgba(139,0,0,0.1); }
+.field-label.my { color:#00408b; border:1px solid #00408b; background:rgba(0,64,139,0.1); }
 
-#canvas-wrap { flex:1; display:flex; align-items:center; justify-content:center; overflow:hidden; min-height:0; max-height:55vh; }
-canvas { display:block; }
+#canvas-wrap { flex:1; display:flex; align-items:center; justify-content:center; overflow:hidden; min-height:0; max-height:45vh; background:#e8dcc8; }
+canvas { display:block; image-rendering:pixelated; }
 
-#hint { text-align:center; font-size:10px; color:#4a6a8a; padding:2px 0; letter-spacing:0.03em; flex-shrink:0; background:rgba(10,14,26,0.95); min-height:18px; }
+#hint { text-align:center; font-size:10px; color:#6b4c2a; padding:2px 0; letter-spacing:0.03em; flex-shrink:0; background:#d4b483; min-height:18px; border-top:1px solid #b8915a; }
 
 #ui-bottom {
   display:flex;
   gap:8px;
-  padding:7px 12px 10px;
-  background:rgba(10,14,26,0.95);
-  border-top:1px solid #1a2535;
+  padding:8px 12px 12px;
+  background:#c8a96e;
+  border-top:3px solid #8b6914;
   flex-shrink:0;
 }
 .btn {
-  flex:1; padding:9px 4px;
-  border:1px solid; border-radius:5px;
-  font-family:'Courier New',monospace; font-size:11px;
+  flex:1; padding:10px 4px;
+  border:2px solid; border-radius:6px;
+  font-family:'Georgia',serif; font-size:12px;
   font-weight:bold; letter-spacing:0.04em; text-transform:uppercase;
-  cursor:pointer; background:transparent; transition:all 0.15s;
-  white-space:nowrap;
+  cursor:pointer; transition:all 0.15s; white-space:nowrap;
 }
-#btn-fire { border-color:#e05050; color:#e05050; }
-#btn-fire.active { background:#e05050; color:#fff; }
-#btn-move { border-color:#4daaff; color:#4daaff; }
-#btn-move.active { background:#4daaff; color:#0a0e1a; }
-.btn:disabled { opacity:0.3; cursor:default; }
+#btn-fire { border-color:#8b0000; color:#8b0000; background:#f5e8d8; }
+#btn-fire.active { background:#8b0000; color:#fff; box-shadow:0 0 12px rgba(139,0,0,0.5); }
+#btn-move { border-color:#00408b; color:#00408b; background:#f5e8d8; }
+#btn-move.active { background:#00408b; color:#fff; box-shadow:0 0 12px rgba(0,64,139,0.4); }
+.btn:disabled { opacity:0.35; cursor:default; }
 
 /* Overlays */
 .overlay {
   position:fixed; inset:0;
   display:flex; flex-direction:column;
   align-items:center; justify-content:center;
-  background:rgba(10,14,26,0.96);
+  background:rgba(245,240,232,0.97);
   z-index:100; gap:16px; text-align:center; padding:24px;
 }
-.overlay h1 { font-size:24px; letter-spacing:0.1em; text-transform:uppercase; }
-.overlay p { font-size:13px; color:#7ab3d4; line-height:1.6; }
-.overlay .big { font-size:48px; }
+.overlay h1 { font-size:26px; letter-spacing:0.1em; text-transform:uppercase; color:#3a1a00; }
+.overlay p { font-size:13px; color:#6b4c2a; line-height:1.7; }
+.overlay .big { font-size:52px; }
 .overlay-btn {
-  padding:12px 32px; border:2px solid #4daaff; border-radius:8px;
-  background:transparent; color:#4daaff;
-  font-family:'Courier New',monospace; font-size:13px;
+  padding:12px 36px; border:2px solid #8b6914; border-radius:8px;
+  background:#c8a96e; color:#3a1a00;
+  font-family:'Georgia',serif; font-size:14px;
   font-weight:bold; letter-spacing:0.08em; text-transform:uppercase; cursor:pointer;
+  box-shadow:0 3px 8px rgba(0,0,0,0.2);
 }
-.overlay-btn:active { background:#4daaff; color:#0a0e1a; }
+.overlay-btn:active { background:#8b6914; color:#fff; }
+.title-img { font-size:40px; }
 </style>
 </head>
 <body>
 
 <div class="overlay" id="screen-menu">
-  <div class="big">🎯</div>
-  <h1>Артилерія</h1>
-  <p>Знищ гармати противника.<br>5 секунд на хід.</p>
-  <button class="overlay-btn" onclick="findGame()">Знайти суперника</button>
+  <div class="big">💣</div>
+  <h1>Artillery</h1>
+  <p>Destroy the enemy cannons.<br>9 seconds per turn — fire or move.</p>
+  <button class="overlay-btn" onclick="findGame()">Find Opponent</button>
 </div>
 <div class="overlay" id="screen-waiting" style="display:none">
   <div class="big">⏳</div>
-  <h1>Пошук...</h1>
-  <p>Чекаємо на суперника</p>
+  <h1>Searching...</h1>
+  <p>Waiting for an opponent</p>
 </div>
 <div class="overlay" id="screen-gameover" style="display:none">
   <div class="big" id="gameover-icon">🏆</div>
-  <h1 id="gameover-title">Перемога!</h1>
+  <h1 id="gameover-title">Victory!</h1>
   <p id="gameover-sub"></p>
-  <button class="overlay-btn" onclick="resetGame()">Зіграти ще раз</button>
+  <button class="overlay-btn" onclick="resetGame()">Play Again</button>
 </div>
 <div class="overlay" id="screen-left" style="display:none">
   <div class="big">🚪</div>
-  <h1>Суперник вийшов</h1>
-  <button class="overlay-btn" onclick="resetGame()">Повернутись</button>
+  <h1>Opponent Left</h1>
+  <button class="overlay-btn" onclick="resetGame()">Back to Menu</button>
 </div>
 
 <div id="ui-top">
-  <div id="status">Очікування...</div>
+  <div id="status">Waiting...</div>
   <div id="timer-bar"><div id="timer-fill"></div></div>
 </div>
 <div id="field-labels">
-  <div class="field-label enemy">⬆ Сторона ворога</div>
-  <div class="field-label my">⬇ Моя сторона</div>
+  <div class="field-label enemy">⬆ Enemy Territory</div>
+  <div class="field-label my">⬇ Your Territory</div>
 </div>
 <div id="canvas-wrap"><canvas id="gc"></canvas></div>
 <div id="hint"></div>
 <div id="ui-bottom">
-  <button class="btn" id="btn-fire" disabled onclick="selectMode('fire')">🔥 Вогонь</button>
-  <button class="btn" id="btn-move" disabled onclick="selectMode('move')">↔ Рух</button>
+  <button class="btn" id="btn-fire" disabled onclick="selectMode('fire')">🔥 Fire</button>
+  <button class="btn" id="btn-move" disabled onclick="selectMode('move')">↔ Move</button>
 </div>
 
 <script>
 const GRID = 6;
 const GAP = 2;
-const MOVE_RANGE = 4; // max cells to move (manhattan distance)
+const MOVE_RANGE = 4;
+const TURN_TIME = 9;
+
+// 2.5D isometric offset per cell
+const ISO_Y_RATIO = 0.38; // how much Y shifts per row (simulates depth)
 
 let ws=null, playerIndex=null, myTurn=false, mode=null, selectedCannonIdx=null;
 let myCannons=[], enemyCannons=[];
 let myAlive=[true,true], enemyAlive=[true,true];
-// Track which enemy cannons are revealed (hit/destroyed)
 let enemyRevealed=[false,false];
 let particles=[];
 let animFrame=null;
@@ -148,24 +161,67 @@ const btnMove=document.getElementById('btn-move');
 const fieldLabels=document.getElementById('field-labels');
 const canvas=document.getElementById('gc');
 const ctx=canvas.getContext('2d');
-let timerInterval=null, turnDuration=5, turnEndTime=0;
+let timerInterval=null, turnDuration=TURN_TIME, turnEndTime=0;
 let CELL=40, OX=0, EN_TOP=0, MY_TOP=0;
-
-// Valid move cells for selected cannon
 let moveCells=[];
+
+// Dirt texture pattern
+let dirtPattern=null;
+function makeDirtPattern(baseColor, darkColor){
+  const pc=document.createElement('canvas');
+  pc.width=8; pc.height=8;
+  const px=pc.getContext('2d');
+  px.fillStyle=baseColor;
+  px.fillRect(0,0,8,8);
+  // Random dots for texture
+  const dots=[[1,1],[3,5],[5,2],[6,6],[2,7],[7,3],[4,0],[0,4]];
+  dots.forEach(([x,y])=>{
+    px.fillStyle=darkColor;
+    px.fillRect(x,y,1,1);
+  });
+  return ctx.createPattern(pc,'repeat');
+}
 
 function layout(){
   const wrap=document.getElementById('canvas-wrap');
   const W=wrap.clientWidth;
-  // Reserve space for: ui-top~36px, field-labels~26px, hint~18px, ui-bottom~56px + gaps ~10px = ~146px
-  const reserved=150;
-  const H = Math.floor(window.innerHeight * 0.45);
+  const H=Math.floor(window.innerHeight*0.45);
   const totalRows=GRID*2+GAP;
   CELL=Math.min(Math.floor(W/GRID), Math.floor(H/totalRows));
-  CELL=Math.max(CELL, 20); // minimum cell size
+  CELL=Math.max(CELL,18);
   const cw=GRID*CELL, ch=totalRows*CELL;
   canvas.width=cw; canvas.height=ch;
   OX=0; EN_TOP=0; MY_TOP=(GRID+GAP)*CELL;
+  // Rebuild dirt patterns
+  dirtPattern=null; // will be created on first draw
+}
+
+// Draw isometric-style cell (trapezoid bottom edge for 2.5D feel)
+function drawIsoCell(x, y, w, h, fillColor, strokeColor, isoShift){
+  const shift=isoShift||0;
+  ctx.beginPath();
+  ctx.moveTo(x, y);
+  ctx.lineTo(x+w, y);
+  ctx.lineTo(x+w, y+h-shift);
+  ctx.lineTo(x, y+h);
+  ctx.closePath();
+  ctx.fillStyle=fillColor;
+  ctx.fill();
+  if(strokeColor){
+    ctx.strokeStyle=strokeColor;
+    ctx.lineWidth=0.5;
+    ctx.stroke();
+  }
+}
+
+function getFieldColors(isMy, dark, highlighted){
+  if(isMy){
+    if(highlighted) return dark?'#7a5c2a':'#a07840';
+    return dark?'#8b6520':'#a87c35';
+  } else {
+    if(highlighted) return dark?'#6b2020':'#8b3030';
+    return dark?'#7a3a15':'#954520';
+  }
 }
 
 function draw(){
@@ -176,35 +232,59 @@ function draw(){
   drawField(MY_TOP, true);
 
   // Gap / front line
-  ctx.fillStyle='#111825';
-  ctx.fillRect(0, GRID*CELL, canvas.width, GAP*CELL);
-  ctx.fillStyle='#2a3a4a';
-  ctx.font=`bold ${Math.round(CELL*0.32)}px Courier New`;
+  const gapY=GRID*CELL;
+  const gapH=GAP*CELL;
+  // Draw a no-man's land strip
+  const grad=ctx.createLinearGradient(0,gapY,0,gapY+gapH);
+  grad.addColorStop(0,'#c8a050');
+  grad.addColorStop(0.5,'#d4aa60');
+  grad.addColorStop(1,'#c8a050');
+  ctx.fillStyle=grad;
+  ctx.fillRect(0,gapY,canvas.width,gapH);
+  // Barbed wire lines
+  ctx.strokeStyle='#5a3a00';
+  ctx.lineWidth=1;
+  ctx.setLineDash([4,3]);
+  ctx.beginPath(); ctx.moveTo(0,gapY+gapH*0.35); ctx.lineTo(canvas.width,gapY+gapH*0.35); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(0,gapY+gapH*0.65); ctx.lineTo(canvas.width,gapY+gapH*0.65); ctx.stroke();
+  ctx.setLineDash([]);
+  // X marks on wire
+  for(let xi=0;xi<GRID;xi++){
+    const wx=xi*CELL+CELL/2;
+    ['0.35','0.65'].forEach(r=>{
+      const wy=gapY+gapH*parseFloat(r);
+      ctx.strokeStyle='#5a3a00'; ctx.lineWidth=1.5;
+      ctx.beginPath(); ctx.moveTo(wx-4,wy-3); ctx.lineTo(wx+4,wy+3); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(wx+4,wy-3); ctx.lineTo(wx-4,wy+3); ctx.stroke();
+    });
+  }
+  ctx.fillStyle='#3a1a00';
+  ctx.font=`bold ${Math.round(CELL*0.28)}px Georgia`;
   ctx.textAlign='center'; ctx.textBaseline='middle';
-  ctx.fillText('— ЛІНІЯ ФРОНТУ —', canvas.width/2, GRID*CELL+GAP*CELL/2);
+  ctx.fillText('— NO MAN\'S LAND —', canvas.width/2, gapY+gapH/2);
 
   // Move highlights
-  if(mode==='move' && selectedCannonIdx!==null){
+  if(mode==='move'&&selectedCannonIdx!==null){
     moveCells.forEach(({x,y})=>{
-      ctx.fillStyle='rgba(77,170,255,0.25)';
-      ctx.fillRect(OX+x*CELL+1, MY_TOP+y*CELL+1, CELL-2, CELL-2);
-      ctx.strokeStyle='#4daaff';
-      ctx.lineWidth=2;
-      ctx.strokeRect(OX+x*CELL+2, MY_TOP+y*CELL+2, CELL-4, CELL-4);
+      ctx.fillStyle='rgba(0,80,180,0.28)';
+      ctx.fillRect(OX+x*CELL+1,MY_TOP+y*CELL+1,CELL-2,CELL-2);
+      ctx.strokeStyle='#4488ff';
+      ctx.lineWidth=2; ctx.setLineDash([3,2]);
+      ctx.strokeRect(OX+x*CELL+2,MY_TOP+y*CELL+2,CELL-4,CELL-4);
+      ctx.setLineDash([]);
     });
   }
 
   // My cannons
   myCannons.forEach((c,i)=>{
-    if(myAlive[i]) drawCannon(MY_TOP, c.x, c.y, false, i===selectedCannonIdx);
-    else drawBurning(MY_TOP, c.x, c.y);
+    if(myAlive[i]) drawCannon25D(MY_TOP,c.x,c.y,false,i===selectedCannonIdx);
+    else drawDestroyed(MY_TOP,c.x,c.y);
   });
-
-  // Enemy cannons — only show if revealed (hit)
+  // Enemy cannons — hidden unless revealed
   enemyCannons.forEach((c,i)=>{
     if(enemyRevealed[i]){
-      if(enemyAlive[i]) drawCannon(EN_TOP, c.x, c.y, true, false);
-      else drawBurning(EN_TOP, c.x, c.y);
+      if(enemyAlive[i]) drawCannon25D(EN_TOP,c.x,c.y,true,false);
+      else drawDestroyed(EN_TOP,c.x,c.y);
     }
   });
 
@@ -212,121 +292,230 @@ function draw(){
 }
 
 function drawField(top, isMy){
+  const isoShift=Math.round(CELL*ISO_Y_RATIO);
   for(let x=0;x<GRID;x++){
     for(let z=0;z<GRID;z++){
       const dark=(x+z)%2===0;
-      let color = isMy
-        ? (dark?'#0d1e35':'#1a3a5c')
-        : (dark?'#2a0d0d':'#3d1010');
-      ctx.fillStyle=color;
-      ctx.fillRect(OX+x*CELL, top+z*CELL, CELL-1, CELL-1);
+      const highlighted=(!isMy&&mode==='fire'&&myTurn)||(isMy&&mode==='move'&&selectedCannonIdx!==null&&myTurn);
+      const baseColor=getFieldColors(isMy,dark,highlighted);
+
+      // Base cell
+      ctx.fillStyle=baseColor;
+      ctx.fillRect(OX+x*CELL,top+z*CELL,CELL,CELL);
+
+      // Dirt texture dots
+      const dots=dark?[[2,2],[5,5],[1,6],[6,1],[3,4]]:[[1,3],[4,1],[6,5],[2,6],[5,3]];
+      const dotColor=dark?(isMy?'#7a5510':'#6a2a00'):(isMy?'#9a6e1a':'#7a2800');
+      dots.forEach(([dx,dz])=>{
+        ctx.fillStyle=dotColor;
+        ctx.fillRect(OX+x*CELL+dx*(CELL/8),top+z*CELL+dz*(CELL/8),Math.max(1,CELL/10),Math.max(1,CELL/10));
+      });
+
+      // 2.5D bottom edge (shadow) — makes cells look like raised tiles
+      ctx.fillStyle=dark?(isMy?'#5a3a00':'#4a1800'):(isMy?'#7a5010':'#6a2200');
+      ctx.fillRect(OX+x*CELL,top+z*CELL+CELL-Math.max(2,CELL/12),CELL,Math.max(2,CELL/12));
+
+      // Right edge shadow
+      ctx.fillStyle=dark?(isMy?'#6a4800':'#581a00'):(isMy?'#8a5a10':'#7a2800');
+      ctx.fillRect(OX+x*CELL+CELL-Math.max(2,CELL/14),top+z*CELL,Math.max(2,CELL/14),CELL);
+
+      // Cell border
+      ctx.strokeStyle=isMy?'rgba(90,50,0,0.4)':'rgba(90,20,0,0.4)';
+      ctx.lineWidth=0.5;
+      ctx.strokeRect(OX+x*CELL+0.5,top+z*CELL+0.5,CELL-1,CELL-1);
     }
   }
-  // Fire mode: highlight enemy field
-  if(!isMy && mode==='fire' && myTurn){
-    ctx.fillStyle='rgba(180,30,30,0.12)';
-    ctx.fillRect(OX, top, GRID*CELL, GRID*CELL);
-  }
-  ctx.strokeStyle=isMy?'#2255aa':'#aa2222';
-  ctx.lineWidth=2;
-  ctx.strokeRect(OX+1, top+1, GRID*CELL-2, GRID*CELL-2);
+  // Field border
+  ctx.strokeStyle=isMy?'#1a3a6a':'#6a1a00';
+  ctx.lineWidth=3;
+  ctx.strokeRect(OX+1,top+1,GRID*CELL-2,GRID*CELL-2);
 }
 
-function drawCannon(top, gx, gz, isEnemy, selected){
+// 2.5D cannon: draws base, body, and barrel with perspective
+function drawCannon25D(top, gx, gz, isEnemy, selected){
   const cx=OX+gx*CELL+CELL/2;
-  const cy=top+gz*CELL+CELL/2;
-  const r=CELL*0.30;
+  const cy=top+gz*CELL+CELL*0.65; // slightly below cell center for 2.5D
+  const s=CELL*0.38; // scale
 
   if(selected){
-    ctx.beginPath(); ctx.arc(cx,cy,r+7,0,Math.PI*2);
-    ctx.fillStyle='rgba(77,170,255,0.2)'; ctx.fill();
+    ctx.beginPath(); ctx.arc(cx,cy,s+8,0,Math.PI*2);
+    ctx.fillStyle='rgba(0,100,220,0.2)'; ctx.fill();
   }
-  ctx.beginPath(); ctx.arc(cx,cy,r,0,Math.PI*2);
-  ctx.fillStyle=isEnemy?'#8b1a1a':'#1a4a8b'; ctx.fill();
-  ctx.strokeStyle=isEnemy?'#ff4444':'#44aaff';
-  ctx.lineWidth=2; ctx.stroke();
 
-  // Barrel
-  const barLen=r*1.1;
-  const dir=isEnemy?-1:1;
-  ctx.beginPath(); ctx.moveTo(cx,cy); ctx.lineTo(cx, cy+dir*barLen);
-  ctx.strokeStyle=isEnemy?'#ff6666':'#66bbff';
-  ctx.lineWidth=Math.max(3,CELL*0.1); ctx.lineCap='round'; ctx.stroke();
+  // Shadow on ground
+  ctx.beginPath();
+  ctx.ellipse(cx,cy+s*0.3,s*0.9,s*0.25,0,0,Math.PI*2);
+  ctx.fillStyle='rgba(0,0,0,0.25)'; ctx.fill();
 
-  // Pulse ring
-  const alpha=0.3+Math.sin(Date.now()*0.003*2)*0.2;
-  ctx.beginPath(); ctx.arc(cx,cy,r+3,0,Math.PI*2);
-  ctx.strokeStyle=isEnemy?`rgba(255,60,60,${alpha})`:`rgba(60,160,255,${alpha})`;
+  // Cannon base (3D box look)
+  const bw=s*1.3, bh=s*0.55, bd=s*0.3;
+  const bx=cx-bw/2, by=cy-bh/2;
+  // Top face
+  ctx.fillStyle=isEnemy?'#8b2020':'#204080';
+  ctx.fillRect(bx,by-bd,bw,bh);
+  // Front face
+  ctx.fillStyle=isEnemy?'#6b1010':'#162d5a';
+  ctx.fillRect(bx,by-bd+bh,bw,bd);
+  // Right side face
+  ctx.beginPath();
+  ctx.moveTo(bx+bw,by-bd); ctx.lineTo(bx+bw+bd*0.6,by-bd*0.5);
+  ctx.lineTo(bx+bw+bd*0.6,by+bh-bd*0.5); ctx.lineTo(bx+bw,by+bh);
+  ctx.closePath();
+  ctx.fillStyle=isEnemy?'#4a0a0a':'#0e1f3a'; ctx.fill();
+
+  // Wheels (two circles)
+  [-bw*0.28,bw*0.28].forEach(wx=>{
+    const wr=s*0.22;
+    // Wheel shadow
+    ctx.beginPath(); ctx.ellipse(cx+wx+2,cy+bd+2,wr,wr*0.6,0,0,Math.PI*2);
+    ctx.fillStyle='rgba(0,0,0,0.2)'; ctx.fill();
+    // Wheel
+    ctx.beginPath(); ctx.arc(cx+wx,cy+bd,wr,0,Math.PI*2);
+    ctx.fillStyle=isEnemy?'#3a0000':'#0a1a30'; ctx.fill();
+    ctx.strokeStyle=isEnemy?'#cc4444':'#4488cc'; ctx.lineWidth=1.5; ctx.stroke();
+    // Spokes
+    for(let a=0;a<3;a++){
+      const ang=a*Math.PI/3;
+      ctx.beginPath();
+      ctx.moveTo(cx+wx+Math.cos(ang)*wr*0.8,cy+bd+Math.sin(ang)*wr*0.8);
+      ctx.lineTo(cx+wx-Math.cos(ang)*wr*0.8,cy+bd-Math.sin(ang)*wr*0.8);
+      ctx.strokeStyle=isEnemy?'#884444':'#448888'; ctx.lineWidth=1; ctx.stroke();
+    }
+  });
+
+  // Barrel (2.5D: angled up slightly)
+  const barW=s*0.22, barH=s*1.0;
+  const barX=cx-barW/2, barY=by-bd-barH;
+  // Barrel shadow side
+  ctx.fillStyle=isEnemy?'#3a0808':'#0a1828';
+  ctx.fillRect(barX+barW*0.7,barY,barW*0.3,barH*0.85);
+  // Barrel main
+  ctx.fillStyle=isEnemy?'#aa2222':'#2255aa';
+  ctx.fillRect(barX,barY,barW*0.75,barH*0.85);
+  // Barrel muzzle
+  ctx.fillStyle=isEnemy?'#cc3333':'#3366bb';
+  ctx.fillRect(barX-barW*0.15,barY,barW*1.1,barH*0.12);
+
+  // Pulse glow
+  const t=Date.now()*0.003;
+  const alpha=0.25+Math.sin(t*2)*0.12;
+  ctx.beginPath(); ctx.arc(cx,cy,s+4,0,Math.PI*2);
+  ctx.strokeStyle=isEnemy?`rgba(220,60,60,${alpha})`:`rgba(60,120,220,${alpha})`;
   ctx.lineWidth=2; ctx.stroke();
 }
 
-function drawBurning(top, gx, gz){
+function drawDestroyed(top, gx, gz){
   const cx=OX+gx*CELL+CELL/2;
-  const cy=top+gz*CELL+CELL/2;
-  const r=CELL*0.28;
-  // Dark destroyed base
-  ctx.beginPath(); ctx.arc(cx,cy,r,0,Math.PI*2);
-  ctx.fillStyle='#2a1a0a'; ctx.fill();
-  ctx.strokeStyle='#553322'; ctx.lineWidth=2; ctx.stroke();
-  // Fire flicker
-  const t=Date.now()*0.004;
-  for(let i=0;i<3;i++){
-    const fx=cx+(Math.sin(t+i*2)*r*0.4);
-    const fy=cy+(Math.cos(t*1.3+i)*r*0.3);
-    const fr=r*(0.2+Math.sin(t*2+i)*0.1);
-    ctx.beginPath(); ctx.arc(fx,fy,fr,0,Math.PI*2);
-    ctx.fillStyle=`rgba(255,${80+i*40},0,0.8)`; ctx.fill();
+  const cy=top+gz*CELL+CELL*0.65;
+  const s=CELL*0.35;
+  // Charred remains
+  ctx.beginPath(); ctx.ellipse(cx,cy,s,s*0.5,0,0,Math.PI*2);
+  ctx.fillStyle='#1a0a00'; ctx.fill();
+  // Fire
+  const t=Date.now()*0.005;
+  for(let i=0;i<4;i++){
+    const fx=cx+(Math.sin(t*1.2+i*1.5)*s*0.35);
+    const fy=cy-(Math.abs(Math.sin(t+i))*s*0.6)-s*0.1;
+    const fr=s*(0.15+Math.sin(t*1.8+i)*0.08);
+    const grad=ctx.createRadialGradient(fx,fy,0,fx,fy,fr*2);
+    grad.addColorStop(0,'rgba(255,220,50,0.9)');
+    grad.addColorStop(0.5,'rgba(255,80,0,0.7)');
+    grad.addColorStop(1,'rgba(100,0,0,0)');
+    ctx.beginPath(); ctx.arc(fx,fy,fr*2,0,Math.PI*2);
+    ctx.fillStyle=grad; ctx.fill();
   }
-  // 💥 symbol
-  ctx.font=`${Math.round(CELL*0.35)}px serif`;
+  ctx.font=`${Math.round(CELL*0.38)}px serif`;
   ctx.textAlign='center'; ctx.textBaseline='middle';
-  ctx.fillText('💥',cx,cy);
+  ctx.fillText('💥',cx,cy-s*0.5);
 }
 
 function drawParticles(){
   particles.forEach(p=>{
-    ctx.globalAlpha=Math.max(0,p.life);
-    ctx.beginPath(); ctx.arc(p.x,p.y,p.r,0,Math.PI*2);
-    ctx.fillStyle=p.color; ctx.fill();
+    if(p.type==='fire'){
+      const grad=ctx.createRadialGradient(p.x,p.y,0,p.x,p.y,p.r);
+      grad.addColorStop(0,`rgba(255,200,50,${p.life})`);
+      grad.addColorStop(0.5,`rgba(255,60,0,${p.life*0.8})`);
+      grad.addColorStop(1,`rgba(80,0,0,0)`);
+      ctx.beginPath(); ctx.arc(p.x,p.y,p.r,0,Math.PI*2);
+      ctx.fillStyle=grad; ctx.fill();
+    } else if(p.type==='smoke'){
+      ctx.beginPath(); ctx.arc(p.x,p.y,p.r,0,Math.PI*2);
+      ctx.fillStyle=`rgba(80,60,40,${p.life*0.4})`; ctx.fill();
+    } else if(p.type==='dirt'){
+      ctx.beginPath(); ctx.arc(p.x,p.y,p.r,0,Math.PI*2);
+      ctx.fillStyle=`rgba(${p.cr},${p.cg},${p.cb},${p.life})`; ctx.fill();
+    } else {
+      ctx.beginPath(); ctx.arc(p.x,p.y,p.r,0,Math.PI*2);
+      ctx.fillStyle=`rgba(${p.cr},${p.cg},${p.cb},${p.life})`; ctx.fill();
+    }
   });
-  ctx.globalAlpha=1;
 }
 
+// EXPLOSION: fire burst + smoke + debris
 function spawnExplosion(top,gx,gz){
-  const cx=OX+gx*CELL+CELL/2, cy=top+gz*CELL+CELL/2;
-  for(let i=0;i<18;i++){
-    const a=Math.random()*Math.PI*2, sp=(2+Math.random()*5)*CELL/40;
-    const hue=Math.floor(Math.random()*30+5);
-    particles.push({x:cx,y:cy,vx:Math.cos(a)*sp,vy:Math.sin(a)*sp,r:3+Math.random()*6,life:1,decay:0.022+Math.random()*0.018,color:`hsl(${hue},100%,60%)`});
+  const cx=OX+gx*CELL+CELL/2, cy=top+gz*CELL+CELL*0.65;
+  // Fire particles
+  for(let i=0;i<20;i++){
+    const a=Math.random()*Math.PI*2, sp=(3+Math.random()*6)*CELL/40;
+    particles.push({type:'fire',x:cx,y:cy,vx:Math.cos(a)*sp,vy:Math.sin(a)*sp-sp*0.5,r:CELL*(0.2+Math.random()*0.25),life:1,decay:0.022+Math.random()*0.015});
   }
-}
-function spawnMiss(top,gx,gz){
-  const cx=OX+gx*CELL+CELL/2, cy=top+gz*CELL+CELL/2;
+  // Smoke
   for(let i=0;i<8;i++){
     const a=Math.random()*Math.PI*2, sp=(1+Math.random()*2)*CELL/40;
-    particles.push({x:cx,y:cy,vx:Math.cos(a)*sp,vy:Math.sin(a)*sp,r:2+Math.random()*3,life:0.7,decay:0.028,color:'#5577aa'});
+    particles.push({type:'smoke',x:cx,y:cy-CELL*0.2,vx:Math.cos(a)*sp*0.4,vy:-sp*0.8-Math.random()*2,r:CELL*(0.25+Math.random()*0.3),life:0.9,decay:0.012+Math.random()*0.01});
   }
+  // Debris chunks
+  for(let i=0;i<10;i++){
+    const a=Math.random()*Math.PI*2, sp=(4+Math.random()*5)*CELL/40;
+    particles.push({type:'debris',x:cx,y:cy,vx:Math.cos(a)*sp,vy:Math.sin(a)*sp-3,r:2+Math.random()*3,life:1,decay:0.028,cr:30,cg:20,cb:10});
+  }
+}
+
+// MISS: dirt clumps fly up
+function spawnMiss(top,gx,gz){
+  const cx=OX+gx*CELL+CELL/2, cy=top+gz*CELL+CELL*0.65;
+  for(let i=0;i<14;i++){
+    const a=-Math.PI/2+(-0.8+Math.random()*1.6); // mostly upward
+    const sp=(3+Math.random()*5)*CELL/40;
+    const brown=[
+      [139,100,35],[120,80,20],[160,120,50],[100,70,15],[150,110,40]
+    ][Math.floor(Math.random()*5)];
+    particles.push({
+      type:'dirt',
+      x:cx+(Math.random()-0.5)*CELL*0.5,
+      y:cy,
+      vx:Math.cos(a)*sp*(0.5+Math.random()),
+      vy:Math.sin(a)*sp,
+      r:3+Math.random()*5,
+      life:1, decay:0.025+Math.random()*0.02,
+      cr:brown[0],cg:brown[1],cb:brown[2]
+    });
+  }
+  // Small impact crater mark (fades)
+  particles.push({type:'dirt',x:cx,y:cy,vx:0,vy:0,r:CELL*0.3,life:0.6,decay:0.008,cr:80,cg:50,cb:10});
 }
 
 function updateParticles(){
   for(let i=particles.length-1;i>=0;i--){
     const p=particles[i];
-    p.x+=p.vx; p.y+=p.vy; p.vy+=0.12; p.life-=p.decay;
+    if(p.vx!==undefined){
+      p.x+=p.vx; p.y+=p.vy;
+      if(p.type==='dirt'||p.type==='debris') p.vy+=0.18; // gravity
+      if(p.type==='smoke'){ p.r+=0.3; p.vx*=0.96; p.vy*=0.96; }
+      if(p.type==='fire') p.r*=0.96;
+    }
+    p.life-=p.decay;
     if(p.life<=0){particles.splice(i,1);}
   }
 }
 
-function calcMoveCells(cannonIdx){
-  const c=myCannons[cannonIdx];
-  const cells=[];
-  for(let x=0;x<GRID;x++){
-    for(let y=0;y<GRID;y++){
-      const dist=Math.abs(x-c.x)+Math.abs(y-c.y);
-      if(dist>0 && dist<=MOVE_RANGE){
-        // Check not occupied by other cannon
-        const blocked=myCannons.some((mc,mi)=>mi!==cannonIdx&&myAlive[mi]&&mc.x===x&&mc.y===y);
-        if(!blocked) cells.push({x,y});
-      }
+function calcMoveCells(idx){
+  const c=myCannons[idx]; const cells=[];
+  for(let x=0;x<GRID;x++) for(let y=0;y<GRID;y++){
+    const dist=Math.abs(x-c.x)+Math.abs(y-c.y);
+    if(dist>0&&dist<=MOVE_RANGE){
+      const blocked=myCannons.some((mc,mi)=>mi!==idx&&myAlive[mi]&&mc.x===x&&mc.y===y);
+      if(!blocked) cells.push({x,y});
     }
   }
   return cells;
@@ -337,7 +526,6 @@ function gameLoop(){
   animFrame=requestAnimationFrame(gameLoop);
 }
 
-// Click
 canvas.addEventListener('click',e=>{
   if(!myTurn||!mode) return;
   const rect=canvas.getBoundingClientRect();
@@ -351,30 +539,24 @@ canvas.addEventListener('click',e=>{
     }
   } else if(mode==='move'){
     if(selectedCannonIdx===null){
-      // Select cannon by tap
       for(let i=0;i<myCannons.length;i++){
         if(!myAlive[i]) continue;
         const c=myCannons[i];
-        const cx=OX+c.x*CELL+CELL/2, cy=MY_TOP+c.y*CELL+CELL/2;
+        const cx=OX+c.x*CELL+CELL/2, cy=MY_TOP+c.y*CELL+CELL*0.65;
         const dx=mx-cx, dy=my-cy;
-        if(Math.sqrt(dx*dx+dy*dy)<CELL*0.55){
-          selectedCannonIdx=i;
-          moveCells=calcMoveCells(i);
-          hintEl.textContent='Виберіть нову позицію (до 4 клітинок)';
-          break;
+        if(Math.sqrt(dx*dx+dy*dy)<CELL*0.6){
+          selectedCannonIdx=i; moveCells=calcMoveCells(i);
+          hintEl.textContent='Select destination (up to 4 cells)'; break;
         }
       }
     } else {
-      // Select destination from valid move cells
       if(my>=MY_TOP&&my<MY_TOP+GRID*CELL&&mx>=OX&&mx<OX+GRID*CELL){
         const gx=Math.floor((mx-OX)/CELL), gz=Math.floor((my-MY_TOP)/CELL);
         const valid=moveCells.find(mc=>mc.x===gx&&mc.y===gz);
         if(valid){
           sendAction({type:'move',cannonIndex:selectedCannonIdx,x:gx,y:gz});
           disableButtons(); selectedCannonIdx=null; moveCells=[]; hintEl.textContent='';
-        } else {
-          hintEl.textContent='Не можна — виберіть підсвічену клітинку';
-        }
+        } else { hintEl.textContent='Invalid — choose a highlighted cell'; }
       }
     }
   }
@@ -385,21 +567,15 @@ function startTimer(s){
   timerInterval=setInterval(()=>{
     const left=(turnEndTime-Date.now())/1000, pct=Math.max(0,left/turnDuration)*100;
     timerFill.style.width=pct+'%';
-    timerFill.style.background=pct>40?'#4daaff':pct>20?'#ffaa00':'#ff4444';
+    timerFill.style.background=pct>50?'#e8a020':pct>25?'#e06010':'#cc2000';
     if(left<=0)clearInterval(timerInterval);
   },80);
 }
 
 function selectMode(m){
-  if(!myTurn) return;
-  mode=m; selectedCannonIdx=null; moveCells=[];
-  if(mode==='fire'){
-    btnFire.classList.add('active'); btnMove.classList.remove('active');
-    hintEl.textContent='Виберіть клітинку для пострілу';
-  } else {
-    btnMove.classList.add('active'); btnFire.classList.remove('active');
-    hintEl.textContent='Виберіть свою гармату';
-  }
+  if(!myTurn)return; mode=m; selectedCannonIdx=null; moveCells=[];
+  if(mode==='fire'){btnFire.classList.add('active');btnMove.classList.remove('active');hintEl.textContent='Select target cell in enemy territory';}
+  else{btnMove.classList.add('active');btnFire.classList.remove('active');hintEl.textContent='Select your cannon to move';}
 }
 
 const SERVER_URL=(()=>{const p=location.protocol==='https:'?'wss:':'ws:';return `${p}//${location.host}`;})();
@@ -408,7 +584,7 @@ function findGame(){
   ws=new WebSocket(SERVER_URL);
   ws.onopen=()=>ws.send(JSON.stringify({type:'find_game'}));
   ws.onmessage=(e)=>handleMessage(JSON.parse(e.data));
-  ws.onerror=()=>{alert('Помилка підключення');resetGame();};
+  ws.onerror=()=>{alert('Connection error');resetGame();};
 }
 function sendAction(a){if(ws&&ws.readyState===1)ws.send(JSON.stringify({type:'action',action:a}));}
 
@@ -418,41 +594,33 @@ function handleMessage(msg){
     myAlive=[true,true]; enemyAlive=[true,true]; enemyRevealed=[false,false];
     showScreen(null); fieldLabels.style.display='flex';
     layout(); if(!animFrame) gameLoop();
-    setStatus(msg.currentTurn===playerIndex?'Ваш хід':'Хід суперника');
+    setStatus(msg.currentTurn===playerIndex?'Your Turn':'Enemy Turn');
   }
   if(msg.type==='turn_start'){
     myTurn=msg.yourTurn; mode=null; selectedCannonIdx=null; moveCells=[]; startTimer(msg.timeLeft);
-    if(myTurn){setStatus('Ваш хід!');btnFire.disabled=false;btnMove.disabled=false;hintEl.textContent='Виберіть дію';btnFire.classList.remove('active');btnMove.classList.remove('active');}
-    else{setStatus('Хід суперника...');disableButtons();hintEl.textContent='';}
+    if(myTurn){setStatus('Your Turn!');btnFire.disabled=false;btnMove.disabled=false;hintEl.textContent='Choose an action';btnFire.classList.remove('active');btnMove.classList.remove('active');}
+    else{setStatus('Enemy Turn...');disableButtons();hintEl.textContent='';}
   }
   if(msg.type==='turn_result'){
     const action=msg.action; myCannons=msg.myCannons; enemyAlive=msg.enemyAlive;
     if(action&&action.type==='fire'){
       if(!myTurn){
-        // Enemy shot at me
         if(msg.hit){spawnExplosion(MY_TOP,action.x,action.y);myAlive[msg.cannonIndex]=false;}
         else spawnMiss(MY_TOP,action.x,action.y);
       } else {
-        // I shot at enemy
-        if(msg.hit){
-          spawnExplosion(EN_TOP,action.x,action.y);
-          enemyAlive[msg.cannonIndex]=false;
-          enemyRevealed[msg.cannonIndex]=true; // reveal hit cannon
-        } else {
-          spawnMiss(EN_TOP,action.x,action.y);
-        }
+        if(msg.hit){spawnExplosion(EN_TOP,action.x,action.y);enemyAlive[msg.cannonIndex]=false;enemyRevealed[msg.cannonIndex]=true;}
+        else spawnMiss(EN_TOP,action.x,action.y);
       }
     }
     myTurn=false;
   }
   if(msg.type==='game_over'){
     clearInterval(timerInterval); fieldLabels.style.display='none';
-    // Reveal all enemy cannons at game end
     enemyRevealed=[true,true];
     document.getElementById('gameover-icon').textContent=msg.youWin?'🏆':'💥';
-    document.getElementById('gameover-title').textContent=msg.youWin?'Перемога!':'Поразка';
-    document.getElementById('gameover-sub').textContent=msg.youWin?'Ви знищили всі гармати!':'Ваші гармати знищено.';
-    setTimeout(()=>showScreen('screen-gameover'),1500);
+    document.getElementById('gameover-title').textContent=msg.youWin?'Victory!':'Defeat';
+    document.getElementById('gameover-sub').textContent=msg.youWin?'All enemy cannons destroyed!':'Your cannons were destroyed.';
+    setTimeout(()=>showScreen('screen-gameover'),1800);
   }
   if(msg.type==='opponent_left'){clearInterval(timerInterval);fieldLabels.style.display='none';showScreen('screen-left');}
 }
@@ -469,7 +637,7 @@ function resetGame(){
   if(animFrame){cancelAnimationFrame(animFrame);animFrame=null;}
   disableButtons(); mode=null; selectedCannonIdx=null; moveCells=[]; myTurn=false;
   timerFill.style.width='100%'; hintEl.textContent=''; fieldLabels.style.display='none';
-  setStatus('Очікування...'); myCannons=[]; enemyCannons=[]; particles=[];
+  setStatus('Waiting...'); myCannons=[]; enemyCannons=[]; particles=[];
   enemyRevealed=[false,false];
   ctx.clearRect(0,0,canvas.width,canvas.height);
   showScreen('screen-menu');
